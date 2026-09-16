@@ -1,0 +1,12 @@
+node_modules/
+package.json
+package-lock.json
+diag*.js
+shot*.png
+*.log
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+!staging/*.apk
