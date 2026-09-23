@@ -112,7 +112,10 @@ public class Bridge {
     public String daily(int n) {
         double[] d = db().dailyExpense(n <= 0 ? 7 : n);
         JSONArray arr = new JSONArray();
-        for (double v : d) arr.put(v);
+        try {
+            for (double v : d) arr.put(v);
+        } catch (Exception ignored) {
+        }
         return arr.toString();
     }
 
