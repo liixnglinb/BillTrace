@@ -6,12 +6,13 @@
 
 ## English
 
-**BillTrace** is an Android auto bookkeeping app: it captures every payment silently via notification listening, SMS parsing and an accessibility engine, classifies merchants automatically, and keeps everything in a local encrypted database. No manual entry, no screenshots, no cloud required.
+**BillTrace** is an Android auto bookkeeping app: it captures payments silently by listening to payment notifications and parsing bank SMS, classifies merchants automatically, and keeps everything in a local database. No manual entry, no screenshots, no cloud.
 
-- 100% auto capture (notification + SMS + accessibility engines, event-driven, ~0 background memory)
-- On-device auto classification (built-in merchant rules + user feedback learning)
-  - Local-first encrypted storage (SQLCipher), optional E2EE cloud sync
-- Tech: Flutter UI (planned) / Kotlin collector process / WebView MVP preview
+- Two capture engines: notification listener (Alipay / WeChat / bank apps) + bank SMS parser
+- Historical backfill: on first run it can import past bank transactions from the SMS inbox
+- On-device auto classification: 120+ merchant rules, plus per-merchant learning from your corrections
+- Local only: plain SQLite in app-private storage, no network, no account, uninstall = gone
+- Tech: Java collector services (NotificationListenerService / BroadcastReceiver) + WebView UI
 
 ## 中文
 
@@ -19,14 +20,17 @@
 
 ### 核心特性
 
-- **三引擎全自动采集**：通知监听 + 银行短信解析 + 无障碍引擎兜底，事件驱动、后台零常驻内存
-- **自动归类**：内置商户规则库 + 端上文本分类，用户纠错一次永久生效
-- **隐私优先**：本地 SQLCipher 加密存储，解析后立即丢弃原始消息，不上传原文；云同步端到端加密且默认关闭
-- **零打扰**：采集静默、反馈环境化（桌面小组件）、纠错异步化
+- **双引擎自动采集**：通知监听（支付宝 / 微信 / 银行 App）+ 银行短信解析，付款后 2 秒内入库
+- **历史回填**：授权短信后，把过去几个月的银行账目一次补进账本
+- **自动归类**：内置 120+ 条商户规则；认不出来的标为待确认，改一次就记住这个商户
+- **只存本机**：App 私有目录里的本地 SQLite，不联网、不上传、不需要账号，卸载即删除
+- **零打扰**：不弹窗、不推送广告，安静待在后台
 
 ### 当前状态
 
-MVP v0.3.0 —— 可交互高保真原型（WebView 壳加载），三引擎采集、端上分类、SQLCipher 与 Flutter UI 为下一阶段落地内容。详见 [docs/](docs/) 设计文档。
+v0.4.0 —— 真机可用的采集版本，通知监听与短信解析均已落地，界面数据全部来自本机真实记录，不含任何演示数据。
+
+有意未做：无障碍引擎（脆弱且要高危权限）、SQLCipher 全库加密、云同步、Flutter UI。设计文档见 [docs/](docs/)。
 
 ### 下载
 
