@@ -5,6 +5,9 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.util.Log;
+
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -16,8 +19,10 @@ import java.util.Map;
 public class TxnStore extends SQLiteOpenHelper {
 
     private static final String DB = "billtrace.db";
-    private static final int VER = 1;
+    /** v2：加 deleted 软删除列。改这里必须同时写 onUpgrade。 */
+    private static final int VER = 2;
     private static final long DEDUP_WINDOW_MS = 120000L;
+    private static final String TAG = "BillTrace";
 
     private static TxnStore instance;
 
@@ -38,27 +43,46 @@ public class TxnStore extends SQLiteOpenHelper {
                 "amount REAL NOT NULL," +
                 "merchant TEXT, category TEXT, sub TEXT, app TEXT," +
                 "source TEXT, account TEXT, raw TEXT," +
-                "confidence INTEGER DEFAULT 80, confirmed INTEGER DEFAULT 1)");
+                "confidence INTEGER DEFAULT 80, confirmed INTEGER DEFAULT 1," +
+                "deleted INTEGER DEFAULT 0)");
         db.execSQL("CREATE INDEX idx_ts ON txns(ts DESC)");
         db.execSQL("CREATE TABLE rules(merchant TEXT PRIMARY KEY, category TEXT, sub TEXT, app TEXT)");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
+        // 空实现会让老用户升级后查到不存在的列而全部报错，绝不能留空。
+        if (oldV < 2) db.execSQL("ALTER TABLE txns ADD COLUMN deleted INTEGER DEFAULT 0");
     }
 
     /**
      * 入库，带两级去重：同一笔钱在 2 分钟内被通知和短信同时捕获时只留信息最全的一条。
      * 返回写入的 id；判定为重复返回 -1。
+     *
+     * synchronized + 事务：判重是先 SELECT 再 INSERT，两步之间如果让另一个线程插进来，
+     * 同一笔钱会记两次（通知与短信同时到达、或连点"导入历史短信"时真实会发生）。
      */
-    public long insert(Txn t) {
+    public synchronized long insert(Txn t) {
         if (t == null || t.amount == 0) return -1;
         SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            long r = insertLocked(db, t);
+            db.setTransactionSuccessful();
+            return r;
+        } catch (Throwable e) {
+            Log.w(TAG, "insert: " + e.getMessage());
+            return -1;
+        } finally {
+            db.endTransaction();
+        }
+    }
 
+    private long insertLocked(SQLiteDatabase db, Txn t) {
         applyLearnedRule(db, t);
 
         Cursor c = db.rawQuery(
-                "SELECT id, merchant, account, confidence FROM txns WHERE ABS(amount - ?) < 0.005 AND ts BETWEEN ? AND ? ORDER BY confidence DESC LIMIT 1",
+                "SELECT id, merchant, account, confidence FROM txns WHERE deleted=0 AND ABS(amount - ?) < 0.005 AND ts BETWEEN ? AND ? ORDER BY confidence DESC LIMIT 1",
                 new String[]{String.valueOf(t.amount), String.valueOf(t.timeMillis - DEDUP_WINDOW_MS), String.valueOf(t.timeMillis + DEDUP_WINDOW_MS)});
         long existId = -1;
         String existMerchant = null, existAccount = null;
@@ -122,7 +146,7 @@ public class TxnStore extends SQLiteOpenHelper {
     public List<Txn> list(int limit) {
         List<Txn> out = new ArrayList<Txn>();
         Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, ts, amount, merchant, category, sub, app, source, account, raw, confidence, confirmed FROM txns ORDER BY ts DESC LIMIT ?",
+                "SELECT id, ts, amount, merchant, category, sub, app, source, account, raw, confidence, confirmed FROM txns WHERE deleted=0 ORDER BY ts DESC LIMIT ?",
                 new String[]{String.valueOf(limit)});
         while (c.moveToNext()) out.add(read(c));
         c.close();
@@ -132,7 +156,7 @@ public class TxnStore extends SQLiteOpenHelper {
     public List<Txn> pending() {
         List<Txn> out = new ArrayList<Txn>();
         Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, ts, amount, merchant, category, sub, app, source, account, raw, confidence, confirmed FROM txns WHERE confirmed=0 ORDER BY ts DESC LIMIT 200", null);
+                "SELECT id, ts, amount, merchant, category, sub, app, source, account, raw, confidence, confirmed FROM txns WHERE deleted=0 AND confirmed=0 ORDER BY ts DESC LIMIT 200", null);
         while (c.moveToNext()) out.add(read(c));
         c.close();
         return out;
@@ -159,7 +183,7 @@ public class TxnStore extends SQLiteOpenHelper {
     public double[] sum(long from, long to) {
         double[] r = new double[3];
         Cursor c = getReadableDatabase().rawQuery(
-                "SELECT amount FROM txns WHERE ts >= ? AND ts < ?", new String[]{String.valueOf(from), String.valueOf(to)});
+                "SELECT amount FROM txns WHERE deleted=0 AND ts >= ? AND ts < ?", new String[]{String.valueOf(from), String.valueOf(to)});
         while (c.moveToNext()) {
             double a = c.getDouble(0);
             if (a < 0) r[0] += -a; else r[1] += a;
@@ -191,16 +215,20 @@ public class TxnStore extends SQLiteOpenHelper {
         return cal.getTimeInMillis();
     }
 
-    /** 最近 n 天的每日支出，index 0 是 n-1 天前。 */
+    /** 最近 n 天的每日支出，index 0 是 n-1 天前。单条 GROUP BY，不再一天查一次。 */
     public double[] dailyExpense(int n) {
         double[] out = new double[n];
-        long today = dayStart(System.currentTimeMillis(), 0);
-        for (int i = 0; i < n; i++) {
-            long from = dayStart(System.currentTimeMillis(), -(n - 1 - i));
-            long to = from + 86400000L;
-            double[] s = sum(from, to);
-            out[i] = s[0];
+        long from = dayStart(System.currentTimeMillis(), -(n - 1));
+        long to = from + n * 86400000L;
+        // from/to 是 long 原始类型，拼接不构成注入面
+        Cursor c = getReadableDatabase().rawQuery(
+                "SELECT (ts - " + from + ")/86400000 AS d, SUM(-amount) FROM txns " +
+                "WHERE deleted=0 AND amount < 0 AND ts >= " + from + " AND ts < " + to + " GROUP BY d", null);
+        while (c.moveToNext()) {
+            int idx = c.getInt(0);
+            if (idx >= 0 && idx < n) out[idx] = c.getDouble(1);
         }
+        c.close();
         return out;
     }
 
@@ -208,7 +236,7 @@ public class TxnStore extends SQLiteOpenHelper {
     public Map<String, Double> byCategory(long from, long to) {
         Map<String, Double> m = new HashMap<String, Double>();
         Cursor c = getReadableDatabase().rawQuery(
-                "SELECT category, SUM(-amount) FROM txns WHERE amount < 0 AND ts >= ? AND ts < ? GROUP BY category ORDER BY 2 DESC",
+                "SELECT category, SUM(-amount) FROM txns WHERE deleted=0 AND amount < 0 AND ts >= ? AND ts < ? GROUP BY category ORDER BY 2 DESC",
                 new String[]{String.valueOf(from), String.valueOf(to)});
         while (c.moveToNext()) m.put(c.getString(0), c.getDouble(1));
         c.close();
@@ -216,14 +244,14 @@ public class TxnStore extends SQLiteOpenHelper {
     }
 
     public int pendingCount() {
-        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM txns WHERE confirmed=0", null);
+        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM txns WHERE deleted=0 AND confirmed=0", null);
         int n = c.moveToFirst() ? c.getInt(0) : 0;
         c.close();
         return n;
     }
 
     public int count() {
-        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM txns", null);
+        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM txns WHERE deleted=0", null);
         int n = c.moveToFirst() ? c.getInt(0) : 0;
         c.close();
         return n;
@@ -233,7 +261,7 @@ public class TxnStore extends SQLiteOpenHelper {
     public void updateCategory(long id, String cat, String sub, boolean remember) {
         SQLiteDatabase db = getWritableDatabase();
         String merchant = "";
-        Cursor c = db.rawQuery("SELECT merchant FROM txns WHERE id=?", new String[]{String.valueOf(id)});
+        Cursor c = db.rawQuery("SELECT merchant FROM txns WHERE id=? AND deleted=0", new String[]{String.valueOf(id)});
         if (c.moveToFirst()) merchant = c.getString(0) == null ? "" : c.getString(0);
         c.close();
 
@@ -252,31 +280,63 @@ public class TxnStore extends SQLiteOpenHelper {
         }
     }
 
+    /** 软删除：界面一键误触还能撤销，数据不出库。 */
     public void delete(long id) {
-        getWritableDatabase().delete("txns", "id=?", new String[]{String.valueOf(id)});
+        ContentValues v = new ContentValues();
+        v.put("deleted", 1);
+        getWritableDatabase().update("txns", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    /** 撤销删除：用详情弹层里的完整字段回插，保留原时间。 */
+    public long restore(String json) {
+        if (json == null || json.isEmpty()) return -1;
+        try {
+            JSONObject o = new JSONObject(json);
+            Txn t = new Txn();
+            t.timeMillis = o.optLong("ts", System.currentTimeMillis());
+            t.amount = o.optDouble("amt", 0);
+            t.merchant = o.optString("m", "");
+            t.category = o.optString("cat", "qita");
+            t.sub = o.optString("sub", "");
+            t.app = o.optString("app", "");
+            t.source = o.optString("src", "");
+            t.account = o.optString("acc", "");
+            t.raw = o.optString("raw", "");
+            t.confidence = (int) o.optDouble("conf", 80);
+            t.confirmed = 1;
+            return insert(t);
+        } catch (Throwable e) {
+            Log.w(TAG, "restore: " + e.getMessage());
+            return -1;
+        }
     }
 
     public String exportCsv() {
         StringBuilder sb = new StringBuilder();
         sb.append("时间,金额,商户,分类,子类,来源,账户\n");
         Cursor c = getReadableDatabase().rawQuery(
-                "SELECT ts, amount, merchant, category, sub, source, account FROM txns ORDER BY ts DESC", null);
+                "SELECT ts, amount, merchant, category, sub, source, account FROM txns WHERE deleted=0 ORDER BY ts DESC", null);
         java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA);
         while (c.moveToNext()) {
-            sb.append(f.format(new java.util.Date(c.getLong(0)))).append(',')
-              .append(String.format(java.util.Locale.CHINA, "%.2f", c.getDouble(1))).append(',')
-              .append(safe(c.getString(2))).append(',')
-              .append(safe(c.getString(3))).append(',')
-              .append(safe(c.getString(4))).append(',')
-              .append(safe(c.getString(5))).append(',')
-              .append(safe(c.getString(6))).append('\n');
+            sb.append(csv(f.format(new java.util.Date(c.getLong(0))))).append(',')
+              .append(csv(String.format(java.util.Locale.CHINA, "%.2f", c.getDouble(1)))).append(',')
+              .append(csv(c.getString(2))).append(',')
+              .append(csv(c.getString(3))).append(',')
+              .append(csv(c.getString(4))).append(',')
+              .append(csv(c.getString(5))).append(',')
+              .append(csv(c.getString(6))).append('\n');
         }
         c.close();
         return sb.toString();
     }
 
-    private String safe(String s) {
-        if (s == null) return "";
-        return s.replace(',', '，').replace('\n', ' ');
+    /** CSV 字段统一加引号、内部引号翻倍；以 = + - @ Tab 开头的值前置单引号防 Excel 公式注入。 */
+    private static String csv(String s) {
+        if (s == null) s = "";
+        if (!s.isEmpty()) {
+            char c0 = s.charAt(0);
+            if (c0 == '=' || c0 == '+' || c0 == '-' || c0 == '@' || c0 == '\t' || c0 == '\'') s = "'" + s;
+        }
+        return '"' + s.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ") + '"';
     }
 }

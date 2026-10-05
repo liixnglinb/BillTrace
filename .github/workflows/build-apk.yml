@@ -23,8 +23,7 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+        # 不再固定 gradle-version：仓库里已提交 wrapper，./gradlew 会自己装 8.9
 
       # keystore 只以 Secrets 形式存在，仓库里没有。每次构建解出同一个文件，
       # 所以签名证书恒定；换用每次新生成的 debug.keystore 会让覆盖安装报签名不一致，
@@ -43,7 +42,7 @@ jobs:
       - name: Build release APK
         env:
           BILLTRACE_KEY_PASSWORD: ${{ secrets.BILLTRACE_KEY_PASSWORD }}
-        run: gradle assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
       # 每次构建都把期望指纹和 APK 里实际的签名证书打出来，两次运行的值必须相同。
       - name: Verify signature

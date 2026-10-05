@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 故意不声明 INTERNET：App 只读本机通知与短信、只写本地 SQLite，
+         声明了反而和「不联网、不上传」的承诺矛盾，也平白多一项权限审计面。 -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
 

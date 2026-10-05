@@ -1,8 +1,7 @@
 package com.voyra.billtrace;
 
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Build;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
@@ -15,6 +14,8 @@ import java.util.Map;
 /** 页面和真实数据之间的桥。页面只拿这里给的数据，不再有任何写死的演示账目。 */
 public class Bridge {
 
+    private static final String TAG = "BillTrace";
+
     private final MainActivity act;
 
     public Bridge(MainActivity act) {
@@ -25,10 +26,10 @@ public class Bridge {
         return TxnStore.get(act);
     }
 
-    private SharedPreferences prefs() {
-        return act.getSharedPreferences(PayNotifyListener.PREFS, Context.MODE_PRIVATE);
-    }
-
+    /**
+     * 出错时带 error 字段回去，而不是返回 "{}"。返回空对象会让页面把「读取失败」
+     * 误判成「没有授权」，用户就会去反复开一个已经开好的权限。
+     */
     @JavascriptInterface
     public String status() {
         try {
@@ -40,8 +41,17 @@ public class Bridge {
             o.put("pending", db().pendingCount());
             o.put("ver", act.versionName());
             return o.toString();
-        } catch (Exception e) {
-            return "{}";
+        } catch (Throwable e) {
+            Log.e(TAG, "status failed", e);
+            return errorJson(e);
+        }
+    }
+
+    private static String errorJson(Throwable e) {
+        try {
+            return new JSONObject().put("error", e.getClass().getSimpleName() + ": " + e.getMessage()).toString();
+        } catch (Exception ignored) {
+            return "{\"error\":\"unknown\"}";
         }
     }
 
@@ -69,6 +79,7 @@ public class Bridge {
                 o.put("app", t.app);
                 o.put("src", t.source);
                 o.put("acc", t.account);
+                o.put("raw", t.raw);
                 o.put("conf", t.confidence);
                 o.put("ok", t.confirmed);
                 arr.put(o);
@@ -89,50 +100,47 @@ public class Bridge {
         return rangeJson(from, from + 86400000L);
     }
 
-    @JavascriptInterface
-    public String range(long from, long to) {
-        return rangeJson(from, to);
-    }
-
     private String rangeJson(long from, long to) {
-        double[] s = db().sum(from, to);
         try {
+            double[] s = db().sum(from, to);
             JSONObject o = new JSONObject();
             o.put("expense", s[0]);
             o.put("income", s[1]);
             o.put("count", (int) s[2]);
             return o.toString();
-        } catch (Exception e) {
-            return "{}";
+        } catch (Throwable e) {
+            Log.e(TAG, "rangeJson failed", e);
+            return errorJson(e);
         }
     }
 
     @JavascriptInterface
     public String daily(int n) {
-        double[] d = db().dailyExpense(n <= 0 ? 7 : n);
         JSONArray arr = new JSONArray();
         try {
-            for (double v : d) arr.put(v);
-        } catch (Exception ignored) {
+            for (double v : db().dailyExpense(n <= 0 ? 7 : n)) arr.put(v);
+        } catch (Throwable e) {
+            Log.e(TAG, "daily failed", e);
         }
         return arr.toString();
     }
 
     @JavascriptInterface
     public String cats(int days) {
-        int n = days <= 0 ? 30 : days;
-        long to = System.currentTimeMillis();
-        long from = db().dayStart(to, -(n - 1));
-        Map<String, Double> m = db().byCategory(from, to + 86400000L);
         JSONArray arr = new JSONArray();
         try {
+            int n = days <= 0 ? 30 : days;
+            long to = System.currentTimeMillis();
+            long from = db().dayStart(to, -(n - 1));
+            Map<String, Double> m = db().byCategory(from, to + 86400000L);
             for (Map.Entry<String, Double> e : m.entrySet()) {
                 JSONObject o = new JSONObject();
                 o.put("id", e.getKey());
                 o.put("amt", e.getValue());
                 arr.put(o);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable e) {
+            Log.e(TAG, "cats failed", e);
         }
         return arr.toString();
     }
@@ -142,9 +150,16 @@ public class Bridge {
         db().updateCategory(id, cat, sub == null ? "" : sub, remember);
     }
 
+    /** 软删除，配合页面上的撤销条；数据仍在库里，可用 restore 回插。 */
     @JavascriptInterface
     public void remove(long id) {
         db().delete(id);
+    }
+
+    /** 撤销删除：字段 JSON 由页面在删除前收集。 */
+    @JavascriptInterface
+    public void restore(String json) {
+        db().restore(json);
     }
 
     @JavascriptInterface
@@ -176,7 +191,7 @@ public class Bridge {
             });
             return;
         }
-        SmsReceiver.backfill(act, new SmsReceiver.Callback() {
+        boolean started = SmsReceiver.backfill(act, new SmsReceiver.Callback() {
             @Override
             public void done(final int scanned, final int added) {
                 act.runOnUiThread(new Runnable() {
@@ -188,6 +203,14 @@ public class Bridge {
                 });
             }
         });
+        if (!started) {
+            act.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(act, "正在扫描短信，请稍候", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
     }
 
     @JavascriptInterface
@@ -207,16 +230,6 @@ public class Bridge {
             @Override
             public void run() {
                 act.openSmsPermissionSettings();
-            }
-        });
-    }
-
-    @JavascriptInterface
-    public void requestSms() {
-        act.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                act.requestSmsThenImport();
             }
         });
     }
@@ -297,23 +310,13 @@ public class Bridge {
         });
     }
 
-    @JavascriptInterface
-    public boolean isListenerEnabled() {
+    // 以下两个不是桥方法，只供 Java 内部使用；暴露给 JS 没有收益，只会扩大桥的攻击面。
+
+    private boolean isListenerEnabled() {
         return act.hasNotificationAccess();
     }
 
-    @JavascriptInterface
-    public boolean hasSms() {
+    private boolean hasSms() {
         return act.hasSmsPermission();
-    }
-
-    @JavascriptInterface
-    public boolean isFirstRun() {
-        return prefs().getBoolean("first_run", true);
-    }
-
-    @JavascriptInterface
-    public void markOnboarded() {
-        prefs().edit().putBoolean("first_run", false).apply();
     }
 }

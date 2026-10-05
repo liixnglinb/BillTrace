@@ -10,7 +10,7 @@
 
 - Two capture engines: notification listener (Alipay / WeChat / bank apps) + bank SMS parser
 - Historical backfill: on first run it can import past bank transactions from the SMS inbox
-- On-device auto classification: 120+ merchant rules, plus per-merchant learning from your corrections
+- On-device auto classification: 110+ merchant rules, plus per-merchant learning from your corrections
 - Local only: plain SQLite in app-private storage, no network, no account, uninstall = gone
 - Tech: Java collector services (NotificationListenerService / BroadcastReceiver) + WebView UI
 
@@ -22,13 +22,13 @@
 
 - **双引擎自动采集**：通知监听（支付宝 / 微信 / 银行 App）+ 银行短信解析，付款后 2 秒内入库
 - **历史回填**：授权短信后，把过去几个月的银行账目一次补进账本
-- **自动归类**：内置 120+ 条商户规则；认不出来的标为待确认，改一次就记住这个商户
+- **自动归类**：内置 110+ 条商户规则；认不出来的标为待确认，改一次就记住这个商户
 - **只存本机**：App 私有目录里的本地 SQLite，不联网、不上传、不需要账号，卸载即删除
 - **零打扰**：不弹窗、不推送广告，安静待在后台
 
 ### 当前状态
 
-v0.4.2 —— 修掉「权限开不上」：通知使用权入口逐级兜底，短信权限被系统记住「不再询问」后改为引导到设置页手动开启；修掉报表三处图表显示错误（空数据画成坏图、分类堆叠条缺 36%、预算环周长不一致）；改用固定的正式签名，覆盖安装不再因签名不一致而被迫卸载重装（卸载会把已授权限清空）。
+v0.4.3 —— 全量代码审查后的修复版：读取失败不再伪装成「未授权」（以前会打出 ¥NaN 并诱导用户反复开权限）；删除账目加确认且 6 秒内可撤销（软删除）；判重改原子，通知与短信同时到达不再重复入库；导出 CSV 加引号转义与公式注入防护；详情能看原始文本了；去掉多余的 INTERNET 权限与本地文件访问；触控目标 ≥44px、支持减弱动态效果。规则数实测 111 条，文案改称 110+。
 
 有意未做：无障碍引擎（脆弱且要高危权限）、SQLCipher 全库加密、云同步、Flutter UI。设计文档见 [docs/](docs/)。
 
@@ -40,11 +40,13 @@ v0.4.2 —— 修掉「权限开不上」：通知使用权入口逐级兜底，
 
 ### 构建
 
+前置：**JDK 17** 与 **Android SDK（compileSdk 34）**。仓库已提交 Gradle wrapper（8.9），不需要单独装 Gradle。
+
 ```bash
-gradle assembleRelease   # 产物：app/build/outputs/apk/release/app-release.apk
+./gradlew assembleRelease   # Windows 用 gradlew.bat；产物：app/build/outputs/apk/release/app-release.apk
 ```
 
-需要两个环境变量指向签名材料，本地没有 keystore 时 release 构建会失败，这是故意的：
+本地没有签名材料时 `assembleRelease` 会失败，这是故意的；`assembleDebug` 可以在不配签名的情况下出包验证编译。签名需要两个环境变量：
 
 ```bash
 export BILLTRACE_KEYSTORE=/path/to/billtrace.p12

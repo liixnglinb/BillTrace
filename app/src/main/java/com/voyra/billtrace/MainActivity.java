@@ -44,11 +44,19 @@ public class MainActivity extends Activity {
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
+        // 不开 setAllowFileAccess：加载 file:///android_asset/ 用不到它，
+        // 开了反而让桥所在页面能读设备上任意 file:// 路径。
         s.setDefaultTextEncodingName("utf-8");
         s.setTextZoom(100);
 
-        webView.setWebViewClient(new WebViewClient());
+        // 只允许回到自己的资产页。桥是跟着 WebView 而不是跟着页面走的，
+        // 一旦导航到外部站点，window.BT 就暴露给那个源了。
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return url == null || !url.startsWith("file:///android_asset/");
+            }
+        });
         webView.addJavascriptInterface(new Bridge(this), "BT");
         webView.loadUrl("file:///android_asset/index.html");
     }
@@ -208,7 +216,8 @@ public class MainActivity extends Activity {
         try {
             return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception e) {
-            return "0.4.2";
+            // 不写死版本号字面量，否则每次发版要记得改这里。空串让页面显示「—」。
+            return "";
         }
     }
 

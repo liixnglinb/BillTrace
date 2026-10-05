@@ -37,7 +37,7 @@ input{font:inherit;color:inherit}
 .topbar h1{font-size:21px;font-weight:700;letter-spacing:-.2px}
 .topbar .sub{font-size:12px;color:var(--text2);margin-top:2px}
 .iconbtn{
-  width:38px;height:38px;border-radius:50%;background:var(--surface);border:1px solid var(--line);
+  width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--line);
   box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;color:var(--text);
   transition:transform .15s;
 }
@@ -74,7 +74,7 @@ input{font:inherit;color:inherit}
 .onboard .step .n{width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
 .onboard .step .t{font-size:13px;color:var(--text);line-height:1.6}
 .onboard .step .t span{color:var(--text2)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--r-input);padding:10px 16px;font-size:14px;font-weight:600;background:var(--primary);color:#fff;transition:transform .15s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--r-input);padding:10px 16px;min-height:44px;font-size:14px;font-weight:600;background:var(--primary);color:#fff;transition:transform .15s}
 .btn:active{transform:scale(.97)}
 .btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--line)}
 .btn.block{width:100%}
@@ -195,7 +195,7 @@ input{font:inherit;color:inherit}
 .sheet .grab{width:38px;height:4px;border-radius:2px;background:#DDE1E6;margin:0 auto 14px}
 .sheet .sh-title{font-size:17px;font-weight:700;margin-bottom:14px}
 .opt-row{display:flex;flex-wrap:wrap;gap:8px}
-.opt{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:8px 13px;font-size:13px;background:#F2F4F6;color:var(--text2);font-weight:500}
+.opt{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:8px 13px;min-height:44px;font-size:13px;background:#F2F4F6;color:var(--text2);font-weight:500}
 .opt.on{background:rgba(11,163,96,.12);color:var(--primary);font-weight:700}
 .opt svg{width:13px;height:13px}
 .fs-h{font-size:12.5px;color:var(--text2);font-weight:600;margin:16px 0 8px}
@@ -222,6 +222,22 @@ input{font:inherit;color:inherit}
 .d-list{margin-top:4px}
 .raw{background:#FAFBFC;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:12px;color:var(--text2);line-height:1.65;word-break:break-all;max-height:110px;overflow-y:auto}
 .warn{font-size:12px;color:var(--text2);line-height:1.7;background:#FAFBFC;border-radius:12px;padding:11px 12px;border:1px solid var(--line)}
+
+/* ---------- 桥异常横幅 / 撤销条 ---------- */
+#errBar{position:fixed;left:12px;right:12px;top:10px;z-index:80;display:none;align-items:center;gap:10px;
+  background:#FEE2E2;border:1px solid #FCA5A5;color:#991B1B;border-radius:14px;padding:11px 13px;
+  font-size:12.5px;line-height:1.5;box-shadow:var(--shadow)}
+#errBar.on{display:flex}
+#errBar b{font-weight:700}
+#undoBar{position:fixed;left:14px;right:14px;bottom:86px;z-index:80;display:none;align-items:center;gap:12px;
+  background:#1F2937;color:#fff;border-radius:14px;padding:11px 14px;font-size:13px;box-shadow:var(--shadow)}
+#undoBar.on{display:flex}
+#undoBar .u{margin-left:auto;color:#5EEAD4;font-weight:700;padding:6px 4px;min-height:44px;display:inline-flex;align-items:center}
+/* 系统开了「减弱动态效果」就别再播过渡和动画 */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
+}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -304,12 +320,12 @@ input{font:inherit;color:inherit}
   <!-- ============ 我的 ============ -->
   <section class="page" id="p-me">
     <div class="card" style="padding:0">
-      <div class="setrow" onclick="BT_openListener()">
+      <div class="setrow" role="button" onclick="BT_openListener()">
         <div class="si"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
         <div class="st">通知使用权<span>付款成功通知到达即自动入库</span></div>
         <span class="pill no" id="stListener">未开启</span>
       </div>
-      <div class="setrow" onclick="BT_importSms()">
+      <div class="setrow" role="button" onclick="BT_importSms()">
         <div class="si"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
         <div class="st">短信权限<span>银行卡消费、工资到账，可回填历史</span></div>
         <span class="pill no" id="stSms">未授权</span>
@@ -317,12 +333,12 @@ input{font:inherit;color:inherit}
     </div>
 
     <div class="card" style="padding:0">
-      <div class="setrow" onclick="BT_importSms()">
+      <div class="setrow" role="button" onclick="BT_importSms()">
         <div class="si"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></div>
         <div class="st">导入历史短信<span>把过去几个月的银行短信补进账本</span></div>
         <span style="color:var(--text3)">›</span>
       </div>
-      <div class="setrow" onclick="doExport()">
+      <div class="setrow" role="button" onclick="doExport()">
         <div class="si"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></div>
         <div class="st">导出 CSV<span id="meCount">共 0 条记录</span></div>
         <span style="color:var(--text3)">›</span>
@@ -330,7 +346,7 @@ input{font:inherit;color:inherit}
     </div>
 
     <div class="card" style="padding:0">
-      <div class="setrow" onclick="toggleMask()">
+      <div class="setrow" role="button" onclick="toggleMask()">
         <div class="si"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
         <div class="st">打开时隐藏金额</div>
         <div class="switch" id="swMask"><i></i></div>
@@ -349,6 +365,8 @@ input{font:inherit;color:inherit}
 <button class="fab" onclick="openRecord()" aria-label="记一笔">
   <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
+
+<div id="errBar"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#991B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span><b>数据读取异常</b> —— 账本打不开了，重启应用通常可恢复；这个状态下不会误判你的授权。</span></div>
 
 <nav class="tabbar">
   <button class="tab on" data-tab="home">
@@ -379,7 +397,7 @@ input{font:inherit;color:inherit}
   <div class="fs-h">分类</div>
   <div class="rgrid" id="recCats"></div>
   <div class="fs-h">商户 / 备注</div>
-  <input class="field" id="recName" placeholder="例如：楼下便利店">
+  <input class="field" id="recName" maxlength="24" placeholder="例如：楼下便利店">
   <div class="pad" id="pad"></div>
   <button class="btn block" onclick="saveManual()">保存</button>
 </div>
@@ -448,6 +466,18 @@ input{font:inherit;color:inherit}
   </div>
 </div>
 
+<div class="sheet" id="sh-confirm">
+  <div class="grab"></div>
+  <div class="sh-title" id="cfTitle">确认</div>
+  <div class="muted" id="cfMsg" style="margin-bottom:14px"></div>
+  <div class="row2">
+    <button class="btn ghost" onclick="closeSheets()">取消</button>
+    <button class="btn" style="background:var(--danger)" id="cfYes" onclick="confirmYes()">删除</button>
+  </div>
+</div>
+
+<div id="undoBar"><span id="undoTxt">已删除</span><button class="u" onclick="undoDelete()">撤销</button></div>
+
 <script>
 /* =========================================================================
    账迹 BillTrace —— 真实数据版
@@ -495,8 +525,8 @@ function catOf(id){ for (var i=0;i<CATS.length;i++) if (CATS[i].id===id) return 
 function catSvg(id, size, color, sw){
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="'+(sw||2)+'" stroke-linecap="round" stroke-linejoin="round">'+(CICON[id]||CICON.qita)+'</svg>';
 }
-function money(n){ return '¥' + Math.abs(n).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function moneyShort(n){
+function money(n){ n = Number(n); if (!isFinite(n)) return '¥—'; return '¥' + Math.abs(n).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function moneyShort(n){ n = Number(n); if (!isFinite(n)) return '¥—';
   var v = Math.abs(n);
   if (v >= 10000) return '¥' + (v/10000).toFixed(1) + '万';
   return '¥' + Math.round(v).toLocaleString('zh-CN');
@@ -529,15 +559,31 @@ function call(name, def, a1, a2, a3){
           : a1 !== undefined ? window.BT[name](a1)
           : window.BT[name]();
     return r;
-  } catch (e) { return def; }
+  } catch (e) { noteBridgeFail(name); return def; }
 }
+/* 桥返回的 JSON 形状不校验的话，字段缺失会一路 undefined 到 money()，
+   首页就会打出 ¥NaN，还会把「读取失败」当成「没授权」让用户去反复开权限。 */
+var bridgeFails = 0;
+function noteBridgeFail(name){ bridgeFails++; }
 function callJson(name, def, a1){
   var r = call(name, null, a1);
-  if (r === null || r === undefined) return def;
-  try { return JSON.parse(r); } catch (e) { return def; }
+  if (r === null || r === undefined) { noteBridgeFail(name); return def; }
+  var o;
+  try { o = JSON.parse(r); } catch (e) { noteBridgeFail(name); return def; }
+  if (!o || typeof o !== 'object') { noteBridgeFail(name); return def; }
+  if (o.error) { noteBridgeFail(name); return def; }
+  // 数组类的合法值包括空数组（新用户账本就是空的），只校验「是不是数组」
+  var isArrayName = name === 'list' || name === 'daily' || name === 'cats' || name === 'pendingList';
+  if (isArrayName ? !Array.isArray(o)
+      : (name === 'status' && (typeof o.listener !== 'boolean' || typeof o.sms !== 'boolean' || typeof o.count !== 'number')) ||
+        ((name === 'month' || name === 'today') && typeof o.expense !== 'number')) {
+    noteBridgeFail(name); return def;
+  }
+  return o;
 }
 
 function refresh(){
+  var before = bridgeFails;
   S.status  = callJson('status', {listener:false, sms:false, smsBlocked:false, count:0, pending:0, ver:''});
   S.month   = callJson('month', {expense:0,income:0,count:0});
   S.today   = callJson('today', {expense:0,count:0});
@@ -545,7 +591,10 @@ function refresh(){
   S.daily   = callJson('daily', [], 7);
   S.cats    = callJson('cats', [], 30);
   S.pending = callJson('pendingList', []);
-  renderAll();
+  // 有失败就不展示授权引导：此时我们根本不知道真实授权状态，引导只会误导
+  var fail = bridgeFails !== before;
+  $('errBar').classList.toggle('on', fail);
+  renderAll(!fail);
 }
 window.BTRefresh = refresh;
 window.BTBack = function(){
@@ -555,12 +604,12 @@ window.BTBack = function(){
 };
 
 /* ---------- 渲染 ---------- */
-function renderAll(){
+function renderAll(trustState){
   renderTop();
-  renderHome();
+  renderHome(trustState !== false);
   renderReport();
   renderBudget();
-  renderMe();
+  renderMe(trustState !== false);
 }
 
 function renderTop(){
@@ -578,7 +627,7 @@ function updateFilterBtn(){
   $('fltBtn').classList.toggle('on', filter.type !== 'all' || filter.cats.length > 0);
 }
 
-function renderHome(){
+function renderHome(trustState){
   /* 概览 */
   $('heroTotal').textContent = money(S.month.expense);
   $('heroToday').textContent = '今日 ' + money(S.today.expense) + ' · ' + S.today.count + ' 笔';
@@ -598,7 +647,7 @@ function renderHome(){
   var ob = $('homeOnboard');
   if (!HAS_BT) {
     ob.innerHTML = '<div class="card"><h3>请在账迹 App 内打开</h3><div class="muted">这个页面要靠 App 的采集引擎才有数据。</div></div>';
-  } else if (!S.status.listener || !S.status.sms) {
+  } else if (trustState !== false && (!S.status.listener || !S.status.sms)) {
     var steps = '';
     if (!S.status.listener) {
       steps += '<div class="step"><div class="n">1</div><div class="t">开启<strong>通知使用权</strong><span>，支付宝、微信付款成功时自动记账</span></div></div>';
@@ -666,7 +715,7 @@ function txnHtml(t){
   var c = catOf(t.cat);
   var sub = t.sub ? (' · ' + t.sub) : '';
   return '<div class="txn-wrap" style="margin-bottom:10px">' +
-    '<div class="txn" onclick="openDetail(' + t.id + ')">' + iconHtml(t) +
+    '<div class="txn" role="button" onclick="openDetail(' + t.id + ')">' + iconHtml(t) +
     '<div class="info"><div class="name">' + esc(t.m) + '</div>' +
     '<div class="meta"><span class="cat-chip" style="background:' + c.color + '14;color:' + c.color + '">' +
     catSvg(t.cat, 11, c.color, 2.4) + ' ' + c.name + esc(sub) + '</span>' +
@@ -747,13 +796,15 @@ function renderBudget(){
   }
 }
 
-function renderMe(){
-  $('stListener').textContent = S.status.listener ? '已开启' : '未开启';
+function renderMe(trustState){
+  // 桥有故障时真实授权状态未知，显示「—」，别再让人去反复开一个开好的权限
+  var known = trustState !== false;
+  $('stListener').textContent = known ? (S.status.listener ? '已开启' : '未开启') : '—';
   $('stListener').className = 'pill ' + (S.status.listener ? 'ok' : 'no');
-  $('stSms').textContent = S.status.sms ? '已授权' : (S.status.smsBlocked ? '需手动开启' : '未授权');
+  $('stSms').textContent = !known ? '—' : (S.status.sms ? '已授权' : (S.status.smsBlocked ? '需手动开启' : '未授权'));
   $('stSms').className = 'pill ' + (S.status.sms ? 'ok' : 'no');
   $('meCount').textContent = '共 ' + (S.status.count || 0) + ' 条记录';
-  $('meVer').textContent = 'v' + (S.status.ver || '0.4.2');
+  $('meVer').textContent = S.status.ver ? 'v' + S.status.ver : '—';
 }
 
 /* ---------- 筛选 / 搜索 ---------- */
@@ -845,10 +896,51 @@ function doRecat(cat){
   closeSheets();
   setTimeout(refresh, 300);
 }
+/* ---------- 删除确认 + 撤销 ---------- */
+var pendingConfirm = null, undoTimer = null, undoPayload = null;
+
+function showConfirm(title, msg, yesLabel, cb){
+  $('cfTitle').textContent = title;
+  $('cfMsg').textContent = msg;
+  $('cfYes').textContent = yesLabel;
+  pendingConfirm = cb;
+  openSheet('sh-confirm');
+}
+function confirmYes(){
+  var cb = pendingConfirm; pendingConfirm = null;
+  closeSheets();
+  if (cb) cb();
+}
 function delTxn(){
   if (!curDetail) return;
-  call('remove', null, curDetail.id);
-  closeSheets();
+  var t = curDetail;
+  showConfirm('删除这笔记录？',
+    money(t.amt) + ' · ' + (t.m || '未命名') + '。删完 6 秒内可以撤销。',
+    '删除', function(){
+      undoPayload = JSON.stringify(t);   // 删除前把完整字段留一份，撤销就是原样回插
+      call('remove', null, t.id);
+      setTimeout(refresh, 300);
+      showUndo('已删除「' + (t.m || '未命名') + '」');
+    });
+}
+function showUndo(text){
+  $('undoTxt').textContent = text;
+  $('undoBar').classList.add('on');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndo, 6000);
+}
+function hideUndo(){
+  $('undoBar').classList.remove('on');
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+  undoPayload = null;
+}
+function undoDelete(){
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+  var payload = undoPayload;
+  undoPayload = null;
+  $('undoBar').classList.remove('on');
+  if (!payload) return;
+  call('restore', null, payload);
   setTimeout(refresh, 300);
 }
 
@@ -930,8 +1022,17 @@ function openBudget(){
   setTimeout(function(){ $('budgetInput').focus(); }, 320);
 }
 function saveBudget(){
-  var v = parseFloat($('budgetInput').value);
-  budget = (v && v > 0) ? v : 0;
+  var raw = $('budgetInput').value.trim();
+  var v = parseFloat(raw);
+  // 留空 = 保持原样。以前非法输入会把预算静默清零，用户打个错字就丢了设置。
+  if (raw === '') { closeSheets(); return; }
+  if (!isFinite(v) || v < 0) { call('toast', null, '请输入大于 0 的数字'); return; }
+  if (v === 0) {
+    budget = 0; localStorage.setItem('bt_budget', '0');
+    closeSheets(); call('toast', null, '已清除预算'); renderHome(); renderBudget(); return;
+  }
+  if (v > 1e9) { call('toast', null, '预算太大了，请输入 10 亿以内'); return; }
+  budget = v;
   localStorage.setItem('bt_budget', String(budget));
   closeSheets();
   renderHome(); renderBudget();
@@ -981,16 +1082,17 @@ var tabs = document.querySelectorAll('.tab[data-tab]');
 for (var ti = 0; ti < tabs.length; ti++) {
   tabs[ti].onclick = function(){ switchTab(this.getAttribute('data-tab')); };
 }
-document.addEventListener('visibilitychange', function(){
-  if (!document.hidden) refresh();
-});
+// 不再监听 visibilitychange：回前台时原生 onResume 已经调过 BTRefresh，
+// 这里再来一遍等于每次回前台把六个同步桥调用全跑两遍。
 
 function esc(s){
   if (s === null || s === undefined) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 refresh();
 </script>
+
 </body>
 </html>

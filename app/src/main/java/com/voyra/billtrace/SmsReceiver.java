@@ -9,6 +9,10 @@ import android.os.Build;
 import android.provider.Telephony;
 import android.util.Log;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import java.util.Locale;
 
 /**
@@ -19,6 +23,9 @@ public class SmsReceiver extends BroadcastReceiver {
 
     private static final String TAG = "BillTrace";
     private static final String[] BANK_HINTS = {"银行", "储蓄卡", "信用卡", "借记卡", "尾号", "账户", "余额"};
+
+    private static final ExecutorService BACKFILL = Executors.newSingleThreadExecutor();
+    private static final AtomicBoolean BACKFILL_RUNNING = new AtomicBoolean(false);
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
@@ -72,39 +79,52 @@ public class SmsReceiver extends BroadcastReceiver {
     }
 
     /**
-     * 回填历史短信。跑在后台线程，完成后回调条数。
+     * 回填历史短信。跑在单线程后台池里，完成后回调条数。
+     *
+     * @return false 表示已有一趟在跑、这次没有再起（否则连点几次会同时开几个全表扫描，
+     *         而判重又不是原子的，同一笔短信会入库两遍）。
      */
-    public static void backfill(final Context ctx, final Callback cb) {
-        new Thread(new Runnable() {
+    public static boolean backfill(final Context ctx, final Callback cb) {
+        if (!BACKFILL_RUNNING.compareAndSet(false, true)) return false;
+        BACKFILL.execute(new Runnable() {
             @Override
             public void run() {
-                int added = 0, scanned = 0;
-                Cursor c = null;
                 try {
-                    Uri uri = Telephony.Sms.Inbox.CONTENT_URI;
-                    String[] proj = {Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE};
-                    c = ctx.getContentResolver().query(uri, proj, null, null, Telephony.Sms.DATE + " DESC");
-                    if (c != null) {
-                        while (c.moveToNext() && scanned < 8000) {
-                            scanned++;
-                            String addr = c.getString(0);
-                            String body = c.getString(1);
-                            long date = c.getLong(2);
-                            if (body == null || body.isEmpty()) continue;
-                            if (!looksLikeBank(addr, body)) continue;
-                            Txn t = PayParser.parse(body, addr, "短信", date);
-                            if (t == null) continue;
-                            if (TxnStore.get(ctx).insert(t) > 0) added++;
-                        }
-                    }
-                } catch (Throwable e) {
-                    Log.w(TAG, "backfill: " + e.getMessage());
+                    runBackfill(ctx, cb);
                 } finally {
-                    if (c != null) c.close();
+                    BACKFILL_RUNNING.set(false);
                 }
-                if (cb != null) cb.done(scanned, added);
             }
-        }, "billtrace-backfill").start();
+        });
+        return true;
+    }
+
+    private static void runBackfill(final Context ctx, final Callback cb) {
+        int added = 0, scanned = 0;
+        Cursor c = null;
+        try {
+            Uri uri = Telephony.Sms.Inbox.CONTENT_URI;
+            String[] proj = {Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE};
+            c = ctx.getContentResolver().query(uri, proj, null, null, Telephony.Sms.DATE + " DESC");
+            if (c != null) {
+                while (c.moveToNext() && scanned < 8000) {
+                    scanned++;
+                    String addr = c.getString(0);
+                    String body = c.getString(1);
+                    long date = c.getLong(2);
+                    if (body == null || body.isEmpty()) continue;
+                    if (!looksLikeBank(addr, body)) continue;
+                    Txn t = PayParser.parse(body, addr, "短信", date);
+                    if (t == null) continue;
+                    if (TxnStore.get(ctx).insert(t) > 0) added++;
+                }
+            }
+        } catch (Throwable e) {
+            Log.w(TAG, "backfill: " + e.getMessage());
+        } finally {
+            if (c != null) c.close();
+        }
+        if (cb != null) cb.done(scanned, added);
     }
 
     public interface Callback {

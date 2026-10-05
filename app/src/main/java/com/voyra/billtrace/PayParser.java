@@ -57,7 +57,9 @@ public class PayParser {
 
         boolean income = isIncome(t);
         String merchant = Rules.merchant(t);
-        if (merchant.isEmpty()) merchant = merchantByPattern(t);
+        // 关键字表命中才算「认识」这个商户；正则从正文里抠出来的经常是错的，不能拿来免确认。
+        boolean knownMerchant = !merchant.isEmpty();
+        if (!knownMerchant) merchant = merchantByPattern(t);
 
         String channelApp = Rules.channelApp(pkg);
         String[] cls = Rules.classify(t, channelApp);
@@ -75,7 +77,9 @@ public class PayParser {
         x.account = account(t, pkg);
         x.raw = t.length() > 300 ? t.substring(0, 300) : t;
         x.confidence = confidence(t, merchant, income);
-        x.confirmed = ("qita".equals(x.category) && merchant.isEmpty()) ? 0 : 1;
+        // 自动确认要同时满足：商户来自关键字表、分类明确、置信度够高。
+        // 正则抠出来的商户即便置信度分高也进待确认，改一次就会记住。
+        x.confirmed = (knownMerchant && !"qita".equals(x.category) && x.confidence >= 86) ? 1 : 0;
         return x;
     }
 

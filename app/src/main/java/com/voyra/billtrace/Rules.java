@@ -12,7 +12,7 @@ public class Rules {
         // 餐饮
         {"美团外卖", "canyin", "外卖", "meituan"},
         {"美团", "canyin", "外卖", "meituan"},
-        {"饿了么", "canyin", "外卖", "ele"},
+        {"饿了么", "canyin", "外卖", ""},
         {"肯德基", "canyin", "堂食", "kfc"},
         {"KFC", "canyin", "堂食", "kfc"},
         {"麦当劳", "canyin", "堂食", ""},
@@ -117,8 +117,9 @@ public class Rules {
         {"转账", "renqing", "转账", ""},
         {"礼金", "renqing", "礼金", ""},
         // 金融
-        {"工资", "jinrong", "工资", "cmb"},
-        {"薪资", "jinrong", "工资", "cmb"},
+        // 工资图标不能写死某家银行，留空让 channelApp(pkg) 按真实来源决定
+        {"工资", "jinrong", "工资", ""},
+        {"薪资", "jinrong", "工资", ""},
         {"报销", "jinrong", "报销", ""},
         {"退款", "jinrong", "退款", ""},
         {"利息", "jinrong", "利息", ""},
