@@ -26,17 +26,55 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+      # keystore 只以 Secrets 形式存在，仓库里没有。每次构建解出同一个文件，
+      # 所以签名证书恒定；换用每次新生成的 debug.keystore 会让覆盖安装报签名不一致，
+      # 用户只能卸载重装，而卸载会把通知使用权和短信权限一起清掉。
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.BILLTRACE_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::secret BILLTRACE_KEYSTORE_B64 is not set"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/billtrace.p12"
+          echo "BILLTRACE_KEYSTORE=$RUNNER_TEMP/billtrace.p12" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        env:
+          BILLTRACE_KEY_PASSWORD: ${{ secrets.BILLTRACE_KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon
+
+      # 每次构建都把期望指纹和 APK 里实际的签名证书打出来，两次运行的值必须相同。
+      - name: Verify signature
+        env:
+          BILLTRACE_KEY_PASSWORD: ${{ secrets.BILLTRACE_KEY_PASSWORD }}
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          echo "--- keystore cert ---"
+          openssl pkcs12 -in "$BILLTRACE_KEYSTORE" -nokeys -clcerts \
+            -passin env:BILLTRACE_KEY_PASSWORD 2>/dev/null \
+            | openssl x509 -noout -subject -enddate -fingerprint -sha256
+          echo "--- apk signer ---"
+          SIGNER=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}" ~/.gradle \
+            -type f -name apksigner 2>/dev/null | head -1)
+          if [ -n "$SIGNER" ]; then
+            "$SIGNER" verify --verbose --print-certs "$APK"
+          else
+            echo "::warning::apksigner not found on runner, skipped cert print"
+          fi
 
       - name: Prepare artifact
         run: |
           mkdir -p staging
-          cp app/build/outputs/apk/debug/app-debug.apk staging/BillTrace-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk staging/BillTrace.apk
+          # 站上的下载链一直指向 BillTrace-debug.apk，保留同名副本一年，避免旧链接 404。
+          cp app/build/outputs/apk/release/app-release.apk staging/BillTrace-debug.apk
 
       - name: Upload to Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create latest --title "BillTrace 最新构建" --notes "自动构建于 commit ${{ github.sha }}" --latest || true
+          gh release upload latest staging/BillTrace.apk --clobber
           gh release upload latest staging/BillTrace-debug.apk --clobber

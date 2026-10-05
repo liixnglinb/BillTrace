@@ -515,7 +515,7 @@ function dayLabel(ts){
 }
 function iconHtml(t, cls){
   var app = t.app || '';
-  if (ICON_KEYS[app]) return '<div class="bic '+(cls||'')+'"><img src="assets/icons/'+app+'.png" alt=""></div>';
+  if (ICON_KEYS[app]) return '<div class="bic '+(cls||'')+'"><img src="assets/icons/'+app+'.webp" alt=""></div>';
   var c = catOf(t.cat);
   return '<div class="bic '+(cls||'')+'" style="background:'+c.color+'14">'+catSvg(t.cat,20,c.color)+'</div>';
 }
@@ -538,7 +538,7 @@ function callJson(name, def, a1){
 }
 
 function refresh(){
-  S.status  = callJson('status', {listener:false, sms:false, count:0, pending:0, ver:''});
+  S.status  = callJson('status', {listener:false, sms:false, smsBlocked:false, count:0, pending:0, ver:''});
   S.month   = callJson('month', {expense:0,income:0,count:0});
   S.today   = callJson('today', {expense:0,count:0});
   S.list    = callJson('list', [], 200);
@@ -604,12 +604,15 @@ function renderHome(){
       steps += '<div class="step"><div class="n">1</div><div class="t">开启<strong>通知使用权</strong><span>，支付宝、微信付款成功时自动记账</span></div></div>';
     }
     if (!S.status.sms) {
-      steps += '<div class="step"><div class="n">'+(S.status.listener?'1':'2')+'</div><div class="t">允许<strong>读取短信</strong><span>，银行卡消费和工资到账靠它，还能把过去几个月的记录补进来</span></div></div>';
+      steps += '<div class="step"><div class="n">'+(S.status.listener?'1':'2')+'</div><div class="t">允许<strong>读取短信</strong><span>，银行卡消费和工资到账靠它，还能把过去几个月的记录补进来'+(S.status.smsBlocked?'<br><strong style="color:#B45309">系统已记住「不再询问」，弹窗不会再出现，需要去设置里手动打开</strong>':'')+'</span></div></div>';
     }
-    ob.innerHTML = '<div class="card onboard"><h3>还差两步就能自动记账</h3>' + steps +
+    var hint = (!S.status.listener)
+      ? '<div class="warn">跳转后如果列表里<strong>找不到「账迹」</strong>，说明这个系统改了入口，去 设置 → 通知 → 通知使用权（小米/红米在 应用设置 → 特殊权限设置，华为在 应用 → 特殊权限管理）。</div>'
+      : '';
+    ob.innerHTML = '<div class="card onboard"><h3>还差两步就能自动记账</h3>' + steps + hint +
       '<div class="row2">' +
       (S.status.listener ? '' : '<button class="btn" onclick="BT_openListener()">开启通知权限</button>') +
-      (S.status.sms ? '' : '<button class="btn '+(S.status.listener?'':'ghost')+'" onclick="BT_importSms()">导入短信账目</button>') +
+      (S.status.sms ? '' : '<button class="btn '+(S.status.listener?'':'ghost')+'" onclick="'+(S.status.smsBlocked?'BT_openSmsSettings()':'BT_importSms()')+'">'+(S.status.smsBlocked?'去设置里开启':'导入短信账目')+'</button>') +
       '</div></div>';
   } else {
     ob.innerHTML = '';
@@ -733,10 +736,10 @@ function renderBudget(){
 function renderMe(){
   $('stListener').textContent = S.status.listener ? '已开启' : '未开启';
   $('stListener').className = 'pill ' + (S.status.listener ? 'ok' : 'no');
-  $('stSms').textContent = S.status.sms ? '已授权' : '未授权';
+  $('stSms').textContent = S.status.sms ? '已授权' : (S.status.smsBlocked ? '需手动开启' : '未授权');
   $('stSms').className = 'pill ' + (S.status.sms ? 'ok' : 'no');
   $('meCount').textContent = '共 ' + (S.status.count || 0) + ' 条记录';
-  $('meVer').textContent = 'v' + (S.status.ver || '0.4.0');
+  $('meVer').textContent = 'v' + (S.status.ver || '0.4.1');
 }
 
 /* ---------- 筛选 / 搜索 ---------- */
@@ -934,6 +937,7 @@ function doExport(){
 }
 function BT_openListener(){ call('openNotificationSettings', null); }
 function BT_importSms(){ call('importSms', null); }
+function BT_openSmsSettings(){ call('openSmsPermissionSettings', null); }
 
 /* ---------- 弹层 / 导航 ---------- */
 function openSheet(id){

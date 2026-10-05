@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+// 签名材料只从环境变量进来，仓库里不放 keystore。CI 用 GitHub Secrets 注入。
+def ksPath = System.getenv('BILLTRACE_KEYSTORE')
+def ksPass = System.getenv('BILLTRACE_KEY_PASSWORD')
+
 android {
     namespace 'com.voyra.billtrace'
     compileSdk 34
@@ -10,13 +14,25 @@ android {
         applicationId "com.voyra.billtrace"
         minSdk 26
         targetSdk 34
-        versionCode 2
-        versionName "0.4.0"
+        versionCode 3
+        versionName "0.4.1"
+    }
+
+    signingConfigs {
+        release {
+            if (ksPath && file(ksPath).exists()) {
+                storeFile file(ksPath)
+                storePassword ksPass
+                keyAlias 'billtrace'
+                keyPassword ksPass
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

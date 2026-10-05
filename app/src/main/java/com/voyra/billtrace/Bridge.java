@@ -1,10 +1,8 @@
 package com.voyra.billtrace;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
-import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
@@ -37,6 +35,7 @@ public class Bridge {
             JSONObject o = new JSONObject();
             o.put("listener", isListenerEnabled());
             o.put("sms", hasSms());
+            o.put("smsBlocked", act.isSmsPermanentlyDenied());
             o.put("count", db().count());
             o.put("pending", db().pendingCount());
             o.put("ver", act.versionName());
@@ -196,13 +195,18 @@ public class Bridge {
         act.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                Intent i = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                try {
-                    act.startActivity(i);
-                } catch (Exception e) {
-                    Toast.makeText(act, "打不开通知权限页面，请到 设置-通知-通知使用权 里手动开启", Toast.LENGTH_LONG).show();
-                }
+                act.openNotificationSettings();
+            }
+        });
+    }
+
+    /** 短信权限被系统记住「不再询问」时，页面用它把用户送到应用信息页。 */
+    @JavascriptInterface
+    public void openSmsPermissionSettings() {
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                act.openSmsPermissionSettings();
             }
         });
     }
@@ -213,19 +217,6 @@ public class Bridge {
             @Override
             public void run() {
                 act.requestSmsThenImport();
-            }
-        });
-    }
-
-    @JavascriptInterface
-    public void openAppSettings() {
-        act.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                i.setData(android.net.Uri.parse("package:" + act.getPackageName()));
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                act.startActivity(i);
             }
         });
     }
@@ -308,14 +299,7 @@ public class Bridge {
 
     @JavascriptInterface
     public boolean isListenerEnabled() {
-        if (Build.VERSION.SDK_INT < 19) return false;
-        try {
-            String flat = Settings.Secure.getString(act.getContentResolver(), "enabled_notification_listeners");
-            if (flat == null || flat.isEmpty()) return false;
-            return flat.contains(act.getPackageName());
-        } catch (Exception e) {
-            return prefs().getBoolean(PayNotifyListener.KEY_LISTENER, false);
-        }
+        return act.hasNotificationAccess();
     }
 
     @JavascriptInterface

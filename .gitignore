@@ -12,3 +12,7 @@ app/build/
 local.properties
 *.apk
 !staging/*.apk
+*.p12
+*.jks
+*.keystore
+*.keystore.pass

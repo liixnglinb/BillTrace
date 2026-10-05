@@ -28,21 +28,33 @@
 
 ### 当前状态
 
-v0.4.0 —— 真机可用的采集版本，通知监听与短信解析均已落地，界面数据全部来自本机真实记录，不含任何演示数据。
+v0.4.1 —— 修掉「权限开不上」：通知使用权入口逐级兜底，短信权限被系统记住「不再询问」后改为引导到设置页手动开启；改用固定的正式签名，覆盖安装不再因签名不一致而被迫卸载重装（卸载会把已授权限清空）。
 
 有意未做：无障碍引擎（脆弱且要高危权限）、SQLCipher 全库加密、云同步、Flutter UI。设计文档见 [docs/](docs/)。
 
 ### 下载
 
-前往 [Releases](https://github.com/liixnglinb/BillTrace/releases/latest) 下载 `BillTrace-debug.apk`（Android 8.0+），或访问官网下载页：https://lxlrwxs.top/billtrace/
+前往 [Releases](https://github.com/liixnglinb/BillTrace/releases/latest) 下载 `BillTrace.apk`（Android 8.0+），或访问官网下载页：https://lxlrwxs.top/billtrace/
+
+`BillTrace-debug.apk` 是同内容的兼容副本，仅因为站内旧链接指向这个名字。
 
 ### 构建
 
 ```bash
-gradle assembleDebug   # 产物：app/build/outputs/apk/debug/app-debug.apk
+gradle assembleRelease   # 产物：app/build/outputs/apk/release/app-release.apk
 ```
 
-push 到 main 即触发 GitHub Actions 自动构建并上传 Release（资产名固定 `BillTrace-debug.apk`）。
+需要两个环境变量指向签名材料，本地没有 keystore 时 release 构建会失败，这是故意的：
+
+```bash
+export BILLTRACE_KEYSTORE=/path/to/billtrace.p12
+export BILLTRACE_KEY_PASSWORD=...
+```
+
+push 到 main 即触发 GitHub Actions 自动构建并上传 Release，签名材料从 Secrets `BILLTRACE_KEYSTORE_B64` / `BILLTRACE_KEY_PASSWORD` 注入，仓库内不放 keystore。
+
+> GitHub Secrets 写入后不可读回，只能覆盖。`billtrace.p12` 一旦丢失，已装机的用户将永远无法覆盖升级，必须在仓库外另存离线备份。
+
 
 ### 文档
 
