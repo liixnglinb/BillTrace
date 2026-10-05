@@ -28,7 +28,7 @@
 
 ### 当前状态
 
-v0.4.1 —— 修掉「权限开不上」：通知使用权入口逐级兜底，短信权限被系统记住「不再询问」后改为引导到设置页手动开启；改用固定的正式签名，覆盖安装不再因签名不一致而被迫卸载重装（卸载会把已授权限清空）。
+v0.4.2 —— 修掉「权限开不上」：通知使用权入口逐级兜底，短信权限被系统记住「不再询问」后改为引导到设置页手动开启；修掉报表三处图表显示错误（空数据画成坏图、分类堆叠条缺 36%、预算环周长不一致）；改用固定的正式签名，覆盖安装不再因签名不一致而被迫卸载重装（卸载会把已授权限清空）。
 
 有意未做：无障碍引擎（脆弱且要高危权限）、SQLCipher 全库加密、云同步、Flutter UI。设计文档见 [docs/](docs/)。
 
@@ -54,6 +54,9 @@ export BILLTRACE_KEY_PASSWORD=...
 push 到 main 即触发 GitHub Actions 自动构建并上传 Release，签名材料从 Secrets `BILLTRACE_KEYSTORE_B64` / `BILLTRACE_KEY_PASSWORD` 注入，仓库内不放 keystore。
 
 > GitHub Secrets 写入后不可读回，只能覆盖。`billtrace.p12` 一旦丢失，已装机的用户将永远无法覆盖升级，必须在仓库外另存离线备份。
+
+Release 的标题与说明由 CI 生成：标题取 `app/build.gradle` 的 `versionName`，正文取 [docs/release-notes.md](docs/release-notes.md)。发版改了用户可见行为时，**先更新这个文件**，否则线上说明会停在旧内容。（`latest` 是固定 tag，`gh release create` 只有第一次会成功，所以 CI 在 create 失败时改走 `edit`——少了这一步，标题和说明会永远冻结在首个构建。）
+
 
 
 ### 文档

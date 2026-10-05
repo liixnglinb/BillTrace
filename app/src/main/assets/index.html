@@ -694,18 +694,31 @@ function renderReport(){
     var today = m === d.length - 1;
     bars += '<div class="b' + (today ? ' today' : '') + '"><i style="height:' + h.toFixed(0) + '%"></i><span>' + WEEK[dt.getDay()] + '</span></div>';
   }
-  $('rBars').innerHTML = bars || '<div class="muted" style="padding:20px 0;text-align:center">还没有数据</div>';
+  /* 全 0 时不能画七根等高短线，那看起来像一张坏掉的图，而新用户恰好就是这个状态。 */
+  $('rBars').innerHTML = (bars && max > 0) ? bars :
+    '<div class="muted" style="padding:28px 0;text-align:center">近 7 天还没有支出</div>';
   $('r7note').textContent = max > 0 ? ('最高 ' + moneyShort(max)) : '';
 
-  var stack = '', cats = '', total = sum30;
+  var stack = '', cats = '', total = sum30, shown = 0;
   for (var n = 0; n < S.cats.length && n < 6; n++) {
     var c = catOf(S.cats[n].id);
     var p = total > 0 ? (S.cats[n].amt / total * 100) : 0;
+    shown += S.cats[n].amt;
     stack += '<i style="width:' + p.toFixed(1) + '%;background:' + c.color + '"></i>';
     cats += '<div class="catrow"><div class="ci" style="background:' + c.color + '14">' + catSvg(c.id, 16, c.color) + '</div>' +
       '<div class="nm">' + c.name + '</div><div class="pc">' + Math.round(p) + '%</div><div class="vv num">' + money(S.cats[n].amt) + '</div></div>';
   }
-  $('rStack').innerHTML = stack;
+  /* 只列前 6 类时，剩下的钱必须在堆叠条和列表里显出来，否则占比加起来不到 100%、
+     「合计」也对不上可见行，右边那段灰槽看着像没画完。 */
+  var restN = S.cats.length - 6, rest = total - shown;
+  if (restN > 0 && rest > 0.005) {
+    var pr = rest / total * 100;
+    stack += '<i style="width:' + pr.toFixed(1) + '%;background:#C9CFD8"></i>';
+    cats += '<div class="catrow"><div class="ci" style="background:#F1F3F5">' + catSvg('qita', 16, '#8A94A3') + '</div>' +
+      '<div class="nm">其余 ' + restN + ' 类</div><div class="pc">' + Math.round(pr) + '%</div><div class="vv num">' + money(rest) + '</div></div>';
+  }
+  $('rStack').innerHTML = total > 0 ? stack : '';
+  $('rStack').style.display = total > 0 ? 'flex' : 'none';
   $('rCats').innerHTML = cats || '<div class="muted" style="padding:16px 0;text-align:center">近 30 天还没有支出</div>';
   $('rCatNote').textContent = total > 0 ? ('合计 ' + moneyShort(total)) : '';
 }
@@ -713,6 +726,7 @@ function renderBudget(){
   var used = S.month.expense;
   var pct = budget > 0 ? Math.min(used / budget, 1) : 0;
   var C = 2 * Math.PI * 72;
+  $('bRing').setAttribute('stroke-dasharray', String(C));
   $('bRing').setAttribute('stroke-dashoffset', String(C * (1 - pct)));
   $('bRing').setAttribute('stroke', (budget > 0 && used > budget) ? '#EF4444' : '#0BA360');
   $('bPct').textContent = budget > 0 ? Math.round(used / budget * 100) + '%' : '—';
@@ -739,7 +753,7 @@ function renderMe(){
   $('stSms').textContent = S.status.sms ? '已授权' : (S.status.smsBlocked ? '需手动开启' : '未授权');
   $('stSms').className = 'pill ' + (S.status.sms ? 'ok' : 'no');
   $('meCount').textContent = '共 ' + (S.status.count || 0) + ' 条记录';
-  $('meVer').textContent = 'v' + (S.status.ver || '0.4.1');
+  $('meVer').textContent = 'v' + (S.status.ver || '0.4.2');
 }
 
 /* ---------- 筛选 / 搜索 ---------- */

@@ -75,6 +75,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create latest --title "BillTrace 最新构建" --notes "自动构建于 commit ${{ github.sha }}" --latest || true
+          # 版本号从 build.gradle 取，避免标题和实际构建脱节
+          VER=$(grep -E '^\s*versionName ' app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
+          [ -n "$VER" ] || { echo "::error::versionName not found in app/build.gradle"; exit 1; }
+          echo "release version: $VER"
+          # create 只在第一次成功；之后必须 edit，否则标题和说明会永远停在首个构建
+          gh release create latest --title "账迹 BillTrace v$VER" --notes-file docs/release-notes.md --latest \
+            || gh release edit latest --title "账迹 BillTrace v$VER" --notes-file docs/release-notes.md
           gh release upload latest staging/BillTrace.apk --clobber
           gh release upload latest staging/BillTrace-debug.apk --clobber
+          # 断言：说明真的写进去了，而不是只有资产被覆盖
+          gh release view latest --json body --jq .body | grep -q "$VER" \
+            || { echo "::error::release notes were not updated"; exit 1; }
