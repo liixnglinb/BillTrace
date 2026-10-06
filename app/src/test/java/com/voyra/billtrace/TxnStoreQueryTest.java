@@ -26,7 +26,10 @@ public class TxnStoreQueryTest {
 
     @Test
     public void 商户匹配串是转义后带前后通配() {
-        TxnStore.Sql q = TxnStore.buildSearch("a%b", null, null, 500);
+        // 转义发生在 escapeLike（Bridge.search 先调它再进 buildSearch），
+        // buildSearch 只负责包 %...%。这里必须按真实组合路径传"已转义"的串，
+        // 直接传原始串是在测一个不存在的调用方式（CI 首跑就红在这）。
+        TxnStore.Sql q = TxnStore.buildSearch(TxnStore.escapeLike("a%b"), null, null, 500);
         assertNotNull(q);
         assertEquals("%a\\%b%", q.args[0]);
     }
@@ -80,11 +83,13 @@ public class TxnStoreQueryTest {
     @Test
     public void 用户输入只进绑定参数不进SQL文本() {
         String evil = "'; DROP TABLE txns; --%_";
-        TxnStore.Sql q = TxnStore.buildSearch(evil, null, null, 500);
+        // 按 Bridge.search 的真实路径：先转义，再进语句拼装
+        TxnStore.Sql q = TxnStore.buildSearch(TxnStore.escapeLike(evil), null, null, 500);
         assertNotNull(q);
         assertFalse("拼接进语句文本的只能是占位符：" + q.sql, q.sql.contains("DROP"));
         assertFalse(q.sql.contains("';"));
-        assertTrue(q.args[0].contains("\\%") && q.args[0].contains("\\_"));
+        // 转义后 evil 里原有的 % 和 _ 必须全部带上前导反斜杠，逐字核对
+        assertEquals("%'; DROP TABLE txns; --\\%\\_%", q.args[0]);
     }
 
     @Test
