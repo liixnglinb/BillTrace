@@ -34,10 +34,12 @@ public class CsvExportTest {
     @Test
     public void 公式注入前缀被中和() {
         assertEquals("\"'=1+1\"", TxnStore.csv("=1+1"));
-        assertEquals("\"+1\"", TxnStore.csv("+1"));
-        assertEquals("\"-1\"", TxnStore.csv("-1"));
-        assertEquals("\"@SUM(A1)\"", TxnStore.csv("@SUM(A1)"));
-        assertEquals("\"'=cmd\"", TxnStore.csv("'=cmd"));
+        assertEquals("\"'+1\"", TxnStore.csv("+1"));
+        assertEquals("\"'-1\"", TxnStore.csv("-1"));
+        assertEquals("\"'@SUM(A1)\"", TxnStore.csv("@SUM(A1)"));
+        assertEquals("\"'\t=1\"", TxnStore.csv("\t=1"));
+        // 值本身就以单引号开头时仍会再加一个，得到 ''——依然是文本而不是公式
+        assertEquals("\"''=cmd\"", TxnStore.csv("'=cmd"));
     }
 
     @Test
