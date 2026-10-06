@@ -25,6 +25,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         # 不再固定 gradle-version：仓库里已提交 wrapper，./gradlew 会自己装 8.9
 
+      # 单测不过就不出包。PayParser / Rules / CSV 转义是产品的可信度地基。
+      - name: Unit tests
+        run: ./gradlew test --no-daemon
+
       # keystore 只以 Secrets 形式存在，仓库里没有。每次构建解出同一个文件，
       # 所以签名证书恒定；换用每次新生成的 debug.keystore 会让覆盖安装报签名不一致，
       # 用户只能卸载重装，而卸载会把通知使用权和短信权限一起清掉。

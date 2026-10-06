@@ -132,6 +132,25 @@ public class Rules {
         {"理财", "jinrong", "理财", ""},
     };
 
+    /**
+     * 分类 id -> 中文名。必须与 index.html 里的 CATS 表逐字一致，
+     * 否则导出的 CSV 会出现界面看不到的分类名。
+     */
+    public static String catName(String id) {
+        if (id == null) return "";
+        if ("canyin".equals(id)) return "餐饮";
+        if ("jiaotong".equals(id)) return "交通";
+        if ("gouwu".equals(id)) return "购物";
+        if ("juzhu".equals(id)) return "居住";
+        if ("yule".equals(id)) return "娱乐";
+        if ("yiliao".equals(id)) return "医疗";
+        if ("jiaoyu".equals(id)) return "教育";
+        if ("renqing".equals(id)) return "人情";
+        if ("jinrong".equals(id)) return "金融";
+        if ("qita".equals(id)) return "其他";
+        return id;
+    }
+
     /** 渠道包名 -> 图标 key，商户识别不出来时用渠道图标兜底。 */
     public static String channelApp(String pkg) {
         if (pkg == null) return "";

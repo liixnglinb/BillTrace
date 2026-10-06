@@ -41,4 +41,14 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    testOptions {
+        // 纯逻辑单测不碰 Android API；打开这个开关是为了类能加载，
+        // 一旦测试里真调了 android.* 方法会返回默认值而不是抛「not mocked」。
+        unitTests.returnDefaultValues = true
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
 }

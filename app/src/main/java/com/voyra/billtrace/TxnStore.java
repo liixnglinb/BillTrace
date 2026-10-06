@@ -319,9 +319,9 @@ public class TxnStore extends SQLiteOpenHelper {
         java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA);
         while (c.moveToNext()) {
             sb.append(csv(f.format(new java.util.Date(c.getLong(0))))).append(',')
-              .append(csv(String.format(java.util.Locale.CHINA, "%.2f", c.getDouble(1)))).append(',')
+              .append(csvNum(c.getDouble(1))).append(',')
               .append(csv(c.getString(2))).append(',')
-              .append(csv(c.getString(3))).append(',')
+              .append(csv(Rules.catName(c.getString(3)))).append(',')
               .append(csv(c.getString(4))).append(',')
               .append(csv(c.getString(5))).append(',')
               .append(csv(c.getString(6))).append('\n');
@@ -330,13 +330,25 @@ public class TxnStore extends SQLiteOpenHelper {
         return sb.toString();
     }
 
-    /** CSV 字段统一加引号、内部引号翻倍；以 = + - @ Tab 开头的值前置单引号防 Excel 公式注入。 */
-    private static String csv(String s) {
+    /**
+     * 文本字段：统一加引号、内部引号翻倍；以 = + - @ Tab 开头的值前置单引号，
+     * 防 Excel 公式注入——商户名可能来自短信正文的正则抽取，属于外部可控输入。
+     * 包内可见只为让单元测试能直接断言转义行为。
+     */
+    static String csv(String s) {
         if (s == null) s = "";
         if (!s.isEmpty()) {
             char c0 = s.charAt(0);
             if (c0 == '=' || c0 == '+' || c0 == '-' || c0 == '@' || c0 == '\t' || c0 == '\'') s = "'" + s;
         }
-        return '"' + s.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ") + '"';
+        return '"' + s.replace("\"", "\"\"").replace("\r\n", " ").replace("\n", " ").replace("\r", " ") + '"';
+    }
+
+    /**
+     * 金额列由我们自己 %.2f 格式化，不存在注入面，绝不能加公式前缀——
+     * 否则所有负数支出会变成 Excel 文本，导出后没法求和。
+     */
+    static String csvNum(double v) {
+        return '"' + String.format(java.util.Locale.CHINA, "%.2f", v) + '"';
     }
 }
