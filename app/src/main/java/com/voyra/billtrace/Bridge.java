@@ -8,6 +8,7 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -57,9 +58,48 @@ public class Bridge {
         }
     }
 
+    /** 前端能一次要走的条数上限。桥是公开调用面，不能让它把整表拉进 WebView。 */
+    private static final int MAX_PAGE = 500;
+
+    private static int page(int limit) {
+        if (limit <= 0) return 200;
+        return limit > MAX_PAGE ? MAX_PAGE : limit;
+    }
+
     @JavascriptInterface
     public String list(int limit) {
-        return txnsJson(db().list(limit <= 0 ? 200 : limit));
+        return txnsJson(db().list(page(limit)));
+    }
+
+    /** 键集分页的下一页；ts/id 传当前已加载列表最后一条的对应值。 */
+    @JavascriptInterface
+    public String listMore(long ts, long id, int limit) {
+        return txnsJson(db().listAfter(ts, id, page(limit)));
+    }
+
+    /**
+     * 搜商户 / 分类中文名 / 金额。检索必须在 SQL 侧做：前端只加载了当前页，
+     * 在 S.list 上 filter 会静默漏掉没翻页到的账。
+     */
+    @JavascriptInterface
+    public String search(String q) {
+        String raw = q == null ? "" : q.trim();
+        if (raw.isEmpty()) return "[]";
+        // LIKE 的通配符转义在 TxnStore.escapeLike 里，那边有纯单测
+        String like = TxnStore.escapeLike(raw);
+        String lower = raw.toLowerCase(java.util.Locale.CHINA);
+        List<String> cats = new ArrayList<String>();
+        for (String id : Rules.CAT_IDS) {
+            String name = Rules.catName(id);
+            if (name != null && name.toLowerCase(java.util.Locale.CHINA).contains(lower)) cats.add(id);
+        }
+        Double amount = null;
+        try {
+            double v = Double.parseDouble(raw);
+            if (v > 0 && v <= 1e9) amount = Double.valueOf(Math.round(v * 100) / 100.0);
+        } catch (NumberFormatException ignored) {
+        }
+        return txnsJson(db().search(like, cats.toArray(new String[cats.size()]), amount, MAX_PAGE));
     }
 
     @JavascriptInterface

@@ -4,8 +4,10 @@
   "private": true,
   "description": "账迹 BillTrace 的前端回归与量测工具（Android 工程本身不需要 npm 构建）",
   "scripts": {
+    "test:core": "node tools/test-core.mjs",
     "test:ui": "node tools/ui-regression.mjs",
-    "bench:ui": "node tools/ui-bench.mjs"
+    "bench:ui": "node tools/ui-bench.mjs",
+    "ab:group": "node tools/ui-group-ab.mjs"
   },
   "devDependencies": {
     "playwright-core": "1.63.0"

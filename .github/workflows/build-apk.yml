@@ -29,6 +29,12 @@ jobs:
       - name: Unit tests
         run: ./gradlew test --no-daemon
 
+      # 前端纯函数层（assets/core.js）的 Node 单测。只用 node:assert，
+      # 不 npm install 任何包，所以这一步不依赖网络也不拖慢构建。
+      # CATS ↔ Rules.java 的跨语言一致性也在这里守。
+      - name: Frontend core tests
+        run: node tools/test-core.mjs
+
       # keystore 只以 Secrets 形式存在，仓库里没有。每次构建解出同一个文件，
       # 所以签名证书恒定；换用每次新生成的 debug.keystore 会让覆盖安装报签名不一致，
       # 用户只能卸载重装，而卸载会把通知使用权和短信权限一起清掉。

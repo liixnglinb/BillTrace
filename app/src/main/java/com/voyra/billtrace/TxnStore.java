@@ -11,7 +11,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -143,23 +143,105 @@ public class TxnStore extends SQLiteOpenHelper {
         c.close();
     }
 
+    /** 列顺序与 read(Cursor) 的下标一一对应，改动这里必须同步改 read()。 */
+    private static final String COLS =
+            "id, ts, amount, merchant, category, sub, app, source, account, raw, confidence, confirmed";
+
+    /** 第一页。ORDER BY 带 id 做二级键，配合 listAfter 的 (ts,id) 键集分页。 */
     public List<Txn> list(int limit) {
-        List<Txn> out = new ArrayList<Txn>();
-        Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, ts, amount, merchant, category, sub, app, source, account, raw, confidence, confirmed FROM txns WHERE deleted=0 ORDER BY ts DESC LIMIT ?",
+        Sql q = buildList(limit);
+        return query(q.sql, q.args);
+    }
+
+    static Sql buildList(int limit) {
+        return new Sql("SELECT " + COLS + " FROM txns WHERE deleted=0 ORDER BY ts DESC, id DESC LIMIT ?",
                 new String[]{String.valueOf(limit)});
+    }
+
+    /**
+     * 键集分页：取 (ts,id) 严格小于上一页最后一行的若干条。
+     * 不用 OFFSET 有两个原因——OFFSET 要扫过并丢弃前 offset 行，账目越多越慢；
+     * 而且翻页期间一旦有新账进来，OFFSET 页会整条错位，同一条可能被翻出来两次。
+     * ts 允许相等（同一毫秒到账的两笔），所以必须带 id 打破平局。
+     */
+    public List<Txn> listAfter(long ts, long id, int limit) {
+        Sql q = buildListAfter(ts, id, limit);
+        return query(q.sql, q.args);
+    }
+
+    static Sql buildListAfter(long ts, long id, int limit) {
+        return new Sql("SELECT " + COLS + " FROM txns " +
+                        "WHERE deleted=0 AND (ts < ? OR (ts = ? AND id < ?)) ORDER BY ts DESC, id DESC LIMIT ?",
+                new String[]{String.valueOf(ts), String.valueOf(ts), String.valueOf(id), String.valueOf(limit)});
+    }
+
+    private List<Txn> query(String sql, String[] args) {
+        List<Txn> out = new ArrayList<Txn>();
+        Cursor c = getReadableDatabase().rawQuery(sql, args);
         while (c.moveToNext()) out.add(read(c));
         c.close();
         return out;
     }
 
+    /** LIKE 的通配符要转义，否则用户输入 % 会把全表当成匹配项。放在这里而不是 Bridge，是为了能纯单测。 */
+    static String escapeLike(String raw) {
+        if (raw == null) return "";
+        return raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    /** 检索语句的产物：拼好的 SQL 和按顺序对应的绑定参数。拆出来是为了能在 JVM 侧纯单测。 */
+    static class Sql {
+        final String sql; final String[] args;
+        Sql(String sql, String[] args) { this.sql = sql; this.args = args; }
+    }
+
+    /**
+     * 只拼语句不碰数据库。三类条件之间是 OR：原来的前端实现是把商户+分类名+备注拼成
+     * 一个串再 indexOf，语义就是"命中任意一个"，改成 AND 会让"搜餐饮"只出商户名里带餐饮的账。
+     * 返回 null 表示没有任何有效条件，调用方应当直接返回空结果而不是全表。
+     */
+    static Sql buildSearch(String likeText, String[] catIds, Double amountExact, int limit) {
+        List<String> parts = new ArrayList<String>();
+        List<String> args = new ArrayList<String>();
+        if (likeText != null && !likeText.isEmpty()) {
+            parts.add("(merchant LIKE ? ESCAPE '\\' OR sub LIKE ? ESCAPE '\\' OR account LIKE ? ESCAPE '\\')");
+            String w = "%" + likeText + "%";
+            args.add(w); args.add(w); args.add(w);
+        }
+        if (catIds != null && catIds.length > 0) {
+            StringBuilder in = new StringBuilder("category IN (");
+            for (int i = 0; i < catIds.length; i++) {
+                in.append(i == 0 ? "?" : ",?");
+                args.add(catIds[i]);
+            }
+            parts.add(in.append(")").toString());
+        }
+        if (amountExact != null) {
+            // 金额列存的是带符号的值，用户搜"35"时不会想区分收支，按绝对值比。
+            parts.add("ROUND(ABS(amount), 2) = ?");
+            args.add(String.valueOf(amountExact));
+        }
+        if (parts.isEmpty()) return null;
+        StringBuilder or = new StringBuilder();
+        for (int i = 0; i < parts.size(); i++) or.append(i == 0 ? "" : " OR ").append(parts.get(i));
+        args.add(String.valueOf(limit));
+        return new Sql("SELECT " + COLS + " FROM txns "
+                + "WHERE deleted=0 AND (" + or + ") ORDER BY ts DESC, id DESC LIMIT ?",
+                args.toArray(new String[args.size()]));
+    }
+
+    /**
+     * 全文检索走 SQL，不能只在前端已加载的那一页里 filter——账一多就静默漏结果，
+     * 而搜索框明写了"搜商户、分类、金额"。
+     */
+    public List<Txn> search(String likeText, String[] catIds, Double amountExact, int limit) {
+        Sql q = buildSearch(likeText, catIds, amountExact, limit);
+        if (q == null) return new ArrayList<Txn>();
+        return query(q.sql, q.args);
+    }
+
     public List<Txn> pending() {
-        List<Txn> out = new ArrayList<Txn>();
-        Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, ts, amount, merchant, category, sub, app, source, account, raw, confidence, confirmed FROM txns WHERE deleted=0 AND confirmed=0 ORDER BY ts DESC LIMIT 200", null);
-        while (c.moveToNext()) out.add(read(c));
-        c.close();
-        return out;
+        return query("SELECT " + COLS + " FROM txns WHERE deleted=0 AND confirmed=0 ORDER BY ts DESC, id DESC LIMIT 200", null);
     }
 
     private Txn read(Cursor c) {
@@ -232,9 +314,14 @@ public class TxnStore extends SQLiteOpenHelper {
         return out;
     }
 
-    /** 分类占比：Map<category, 支出合计>。 */
+    /**
+     * 分类占比：Map&lt;category, 支出合计&gt;，按金额从大到小。
+     * 必须是 LinkedHashMap：SQL 里的 ORDER BY 2 DESC 只决定行的取出顺序，
+     * 一旦装进 HashMap，entrySet() 就变成哈希序，排序当场丢失、也不报错。
+     * 报表只画前 6 类、其余归入「其他 N 类」，顺序一丢，被丢掉的就可能正是花钱最多的那几类。
+     */
     public Map<String, Double> byCategory(long from, long to) {
-        Map<String, Double> m = new HashMap<String, Double>();
+        Map<String, Double> m = new LinkedHashMap<String, Double>();
         Cursor c = getReadableDatabase().rawQuery(
                 "SELECT category, SUM(-amount) FROM txns WHERE deleted=0 AND amount < 0 AND ts >= ? AND ts < ? GROUP BY category ORDER BY 2 DESC",
                 new String[]{String.valueOf(from), String.valueOf(to)});

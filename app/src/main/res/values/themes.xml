@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- windowBackground 必须和 WebView 里的底色一致。之前是 #0B0C0E（深色），
+         冷启动时窗口先于页面绘制，会先闪一屏近黑色，再跳成白底。
+         windowLightNavigationBar 在 API 26 上不存在，框架会忽略，不影响其他版本。 -->
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#0B0C0E</item>
-        <item name="android:windowBackground">#0B0C0E</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

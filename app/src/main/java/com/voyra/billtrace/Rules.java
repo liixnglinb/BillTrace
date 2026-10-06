@@ -138,6 +138,12 @@ public class Rules {
         for (int i = 0; i < MERCHANTS.length; i++) KEY_LOWER[i] = MERCHANTS[i][0].toLowerCase(Locale.ROOT);
     }
 
+    /** 全部分类 id。搜索按分类中文名反查这些 id，新增分类只要在这里加一行。 */
+    public static final String[] CAT_IDS = {
+            "canyin", "jiaotong", "gouwu", "juzhu", "yule",
+            "yiliao", "jiaoyu", "renqing", "jinrong", "qita"
+    };
+
     /**
      * 分类 id -> 中文名。必须与 index.html 里的 CATS 表逐字一致，
      * 否则导出的 CSV 会出现界面看不到的分类名。
