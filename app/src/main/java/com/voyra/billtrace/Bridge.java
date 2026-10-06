@@ -37,6 +37,8 @@ public class Bridge {
             o.put("listener", isListenerEnabled());
             o.put("sms", hasSms());
             o.put("smsBlocked", act.isSmsPermanentlyDenied());
+            // 回填是全表扫描，可能跑好几秒；界面靠这个字段显示进行中并挡住重复点击
+            o.put("scanning", SmsReceiver.isBackfillRunning());
             o.put("count", db().count());
             o.put("pending", db().pendingCount());
             o.put("ver", act.versionName());
@@ -160,6 +162,28 @@ public class Bridge {
     @JavascriptInterface
     public void restore(String json) {
         db().restore(json);
+    }
+
+    /**
+     * 账本损坏到打不开时，把坏库改名保留并重建空库。
+     * 坏文件不删，用户之后还能找出来自己救数据。
+     */
+    @JavascriptInterface
+    public boolean recoverDatabase() {
+        try {
+            boolean ok = TxnStore.recoverDatabase(act);
+            act.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(act, "已重建空账本，损坏的库保留在本机应用目录", Toast.LENGTH_LONG).show();
+                    act.reloadData();
+                }
+            });
+            return ok;
+        } catch (Throwable e) {
+            Log.e(TAG, "recoverDatabase failed", e);
+            return false;
+        }
     }
 
     @JavascriptInterface

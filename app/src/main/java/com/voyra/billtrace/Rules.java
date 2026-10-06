@@ -132,6 +132,12 @@ public class Rules {
         {"理财", "jinrong", "理财", ""},
     };
 
+    /** 关键字的小写副本，匹配时两边都转小写，避免「kfc 套餐」这种通知漏识别。 */
+    private static final String[] KEY_LOWER = new String[MERCHANTS.length];
+    static {
+        for (int i = 0; i < MERCHANTS.length; i++) KEY_LOWER[i] = MERCHANTS[i][0].toLowerCase(Locale.ROOT);
+    }
+
     /**
      * 分类 id -> 中文名。必须与 index.html 里的 CATS 表逐字一致，
      * 否则导出的 CSV 会出现界面看不到的分类名。
@@ -193,14 +199,16 @@ public class Rules {
         return "";
     }
 
-    /** 返回 {category, sub, iconKey}；未命中返回 qita + 渠道兜底图标。 */
+    /** 返回 {category, sub, iconKey}；未命中返回 qita + 渠道兜底图标。大小写不敏感。 */
     public static String[] classify(String text, String channelApp) {
         String hitCat = null, hitSub = null, hitIcon = null;
         int hitLen = 0;
         if (text != null) {
-            for (String[] row : MERCHANTS) {
-                String kw = row[0];
-                if (text.contains(kw) && kw.length() > hitLen) {
+            String tl = text.toLowerCase(Locale.ROOT);
+            for (int i = 0; i < MERCHANTS.length; i++) {
+                String kw = KEY_LOWER[i];
+                if (kw.length() > hitLen && tl.contains(kw)) {
+                    String[] row = MERCHANTS[i];
                     hitLen = kw.length();
                     hitCat = row[1];
                     hitSub = row[2];
@@ -214,16 +222,17 @@ public class Rules {
         return new String[]{hitCat, hitSub, hitIcon};
     }
 
-    /** 从原始文本里尽量挖出商户名，挖不到返回空串。 */
+    /** 从原始文本里尽量挖出商户名，挖不到返回空串。大小写不敏感，返回表里的原始写法。 */
     public static String merchant(String text) {
         if (text == null) return "";
+        String tl = text.toLowerCase(Locale.ROOT);
         String best = "";
         int bestLen = 0;
-        for (String[] row : MERCHANTS) {
-            String kw = row[0];
-            if (text.contains(kw) && kw.length() > bestLen) {
+        for (int i = 0; i < MERCHANTS.length; i++) {
+            String kw = KEY_LOWER[i];
+            if (kw.length() > bestLen && tl.contains(kw)) {
                 bestLen = kw.length();
-                best = kw;
+                best = MERCHANTS[i][0];
             }
         }
         return best;

@@ -102,6 +102,18 @@ public class RulesTest {
     }
 
     @Test
+    public void 关键字匹配大小写不敏感() {
+        // 通知正文里 "kfc"/"b站"/"steam" 这类小写写法以前匹配不上，会落到其他分类
+        assertEquals("canyin", Rules.classify("kfc 套餐 35元", "")[0]);
+        assertEquals("KFC", Rules.merchant("kfc 套餐 35元"));
+        assertEquals("yule", Rules.classify("b站大会员续费", "")[0]);
+        assertEquals("yule", Rules.classify("steam 游戏", "")[0]);
+        assertEquals("yule", Rules.classify("qq音乐会员", "")[0]);
+        assertEquals("canyin", Rules.classify("Food delivery 20元", "")[0]);
+        assertEquals("jiaotong", Rules.classify("t3出行 12元", "")[0]);
+    }
+
+    @Test
     public void 每条规则的字段都完整合法() {
         for (String[] row : Rules.MERCHANTS) {
             assertEquals(row[0] + " 字段数不对", 4, row.length);

@@ -311,6 +311,33 @@ public class TxnStore extends SQLiteOpenHelper {
         }
     }
 
+    /**
+     * 数据库损坏时的恢复路径：把坏库改名保留（不删），下次 get() 会重建一个空库。
+     * 没有这条路的话，getWritableDatabase() 会永久抛异常，界面只能一直显示错误横幅，
+     * 用户除了卸载（连数据一起没了）之外没有别的办法。
+     *
+     * @return true 表示确实挪走了一个文件；false 表示没有库文件或挪不动。
+     */
+    public static synchronized boolean recoverDatabase(Context ctx) {
+        if (instance != null) {
+            try { instance.close(); } catch (Throwable ignored) { }
+            instance = null;
+        }
+        java.io.File dir = ctx.getDatabasePath(DB).getParentFile();
+        java.io.File db = ctx.getDatabasePath(DB);
+        if (!db.exists()) return false;
+        long stamp = System.currentTimeMillis();
+        renameKeeping(db, new java.io.File(dir, DB + ".corrupt-" + stamp));
+        // WAL 与 shm 必须一起挪走，否则残留日志会让新库读到旧内容或直接打不开
+        renameKeeping(new java.io.File(dir, DB + "-wal"), new java.io.File(dir, DB + "-wal.corrupt-" + stamp));
+        renameKeeping(new java.io.File(dir, DB + "-shm"), new java.io.File(dir, DB + "-shm.corrupt-" + stamp));
+        return true;
+    }
+
+    private static void renameKeeping(java.io.File from, java.io.File to) {
+        try { if (from.exists()) from.renameTo(to); } catch (Throwable ignored) { }
+    }
+
     public String exportCsv() {
         StringBuilder sb = new StringBuilder();
         sb.append("时间,金额,商户,分类,子类,来源,账户\n");

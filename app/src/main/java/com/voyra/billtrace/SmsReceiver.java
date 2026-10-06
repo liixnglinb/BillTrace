@@ -61,7 +61,8 @@ public class SmsReceiver extends BroadcastReceiver {
         Txn t = PayParser.parse(body, address, "短信", when);
         if (t == null) return;
         long id = TxnStore.get(ctx).insert(t);
-        if (id > 0) Log.i(TAG, "短信入库 " + t.merchant + " " + t.amount);
+        // 只记来源与分类：商户名可能含短信原文，金额属于财务隐私，都不进日志。
+        if (id > 0) Log.i(TAG, "短信入库 ok src=sms cat=" + t.category);
     }
 
     static boolean looksLikeBank(String address, String body) {
@@ -125,6 +126,11 @@ public class SmsReceiver extends BroadcastReceiver {
             if (c != null) c.close();
         }
         if (cb != null) cb.done(scanned, added);
+    }
+
+    /** 界面用它决定「导入历史短信」那一行要不要显示进行中并挡住重复点击。 */
+    public static boolean isBackfillRunning() {
+        return BACKFILL_RUNNING.get();
     }
 
     public interface Callback {

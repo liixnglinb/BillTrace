@@ -102,7 +102,8 @@ public class PayNotifyListener extends NotificationListenerService {
             Txn t = PayParser.parse(body, pkg, "通知", sbn.getPostTime());
             if (t == null) return;
             long id = TxnStore.get(this).insert(t);
-            if (id > 0) Log.i(TAG, "通知入库 " + t.merchant + " " + t.amount);
+            // 只记分类，不记商户名与金额：通知正文属于外部可控文本且金额是财务隐私。
+            if (id > 0) Log.i(TAG, "通知入库 ok src=notify cat=" + t.category);
         } catch (Throwable e) {
             Log.w(TAG, "onNotificationPosted: " + e.getMessage());
         }

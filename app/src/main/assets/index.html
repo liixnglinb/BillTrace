@@ -147,6 +147,7 @@ input{font:inherit;color:inherit}
 /* ---------- 我的 ---------- */
 .setrow{display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid var(--line)}
 .setrow:last-child{border-bottom:none}
+.setrow.busy{opacity:.55}
 .setrow .si{width:32px;height:32px;border-radius:10px;background:#F2F4F6;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .setrow .si svg{width:17px;height:17px;stroke:var(--text2);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .setrow .st{flex:1;font-size:14px;font-weight:500}
@@ -229,6 +230,8 @@ input{font:inherit;color:inherit}
   font-size:12.5px;line-height:1.5;box-shadow:var(--shadow)}
 #errBar.on{display:flex}
 #errBar b{font-weight:700}
+#errBar #errBarMsg{flex:1;min-width:0}
+#errBar #errBarFix{flex-shrink:0;background:#991B1B;color:#fff;border-radius:10px;padding:7px 11px;font-size:12px;font-weight:700;min-height:36px}
 #undoBar{position:fixed;left:14px;right:14px;bottom:86px;z-index:80;display:none;align-items:center;gap:12px;
   background:#1F2937;color:#fff;border-radius:14px;padding:11px 14px;font-size:13px;box-shadow:var(--shadow)}
 #undoBar.on{display:flex}
@@ -333,9 +336,9 @@ input{font:inherit;color:inherit}
     </div>
 
     <div class="card" style="padding:0">
-      <div class="setrow" role="button" onclick="BT_importSms()">
+      <div class="setrow" id="rowImport" role="button" onclick="BT_importSms()">
         <div class="si"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></div>
-        <div class="st">导入历史短信<span>把过去几个月的银行短信补进账本</span></div>
+        <div class="st">导入历史短信<span id="rowImportHint">把过去几个月的银行短信补进账本</span></div>
         <span style="color:var(--text3)">›</span>
       </div>
       <div class="setrow" role="button" onclick="doExport()">
@@ -366,7 +369,7 @@ input{font:inherit;color:inherit}
   <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
 
-<div id="errBar"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#991B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span><b>数据读取异常</b> —— 账本打不开了，重启应用通常可恢复；这个状态下不会误判你的授权。</span></div>
+<div id="errBar"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#991B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span id="errBarMsg"><b>数据读取异常</b> —— 账本打不开了。</span><button id="errBarFix" onclick="offerFix()">重试</button></div>
 
 <nav class="tabbar">
   <button class="tab on" data-tab="home">
@@ -514,8 +517,36 @@ var ICON_KEYS = {alipay:1,wechat:1,meituan:1,taobao:1,starbucks:1,kfc:1,jd:1,pdd
 var WEEK = ['日','一','二','三','四','五','六'];
 
 var S = {status:{}, month:{expense:0,income:0,count:0}, today:{expense:0,count:0}, list:[], daily:[], cats:[], pending:[]};
-var budget = parseFloat(localStorage.getItem('bt_budget') || '0') || 0;
-var masked = localStorage.getItem('bt_mask') === '1';
+/* 设置存成带版本的 JSON。读的时候再校验一遍：localStorage 里的值可能被旧版本写过、
+   被用户手改过、或者压根不是 JSON，任何一种都不能让界面白屏。坏值一律夹回安全范围。 */
+var SETTINGS_KEY = 'bt_settings_v1';
+var BUDGET_MAX = 1e9;
+function clampBudget(v) {
+  var b = Number(v);
+  if (!isFinite(b) || b < 0 || b > BUDGET_MAX) return 0;
+  return b;
+}
+function loadSettings() {
+  var s = {v: 1, budget: 0, mask: false};
+  try {
+    var raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      var o = JSON.parse(raw);
+      if (o && typeof o === 'object') { s.budget = clampBudget(o.budget); s.mask = o.mask === true; }
+    } else {
+      // 兼容 v0.4.3 之前分开的两个键
+      s.budget = clampBudget(parseFloat(localStorage.getItem('bt_budget')));
+      s.mask = localStorage.getItem('bt_mask') === '1';
+    }
+  } catch (e) { /* 坏数据退回默认值 */ }
+  return s;
+}
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({v: 1, budget: budget, mask: masked})); } catch (e) {}
+}
+var SET0 = loadSettings();
+var budget = SET0.budget;
+var masked = SET0.mask;
 var tab = 'home';
 var filter = {type:'all', cats:[], sort:'time'};
 var curDetail = null, recAmt = '', recCat = 'canyin', recType = 'exp';
@@ -563,8 +594,48 @@ function call(name, def, a1, a2, a3){
 }
 /* 桥返回的 JSON 形状不校验的话，字段缺失会一路 undefined 到 money()，
    首页就会打出 ¥NaN，还会把「读取失败」当成「没授权」让用户去反复开权限。 */
-var bridgeFails = 0;
+/* 桥出错与界面出错要分开：前者说明数据读不到（不能判断授权，要给重建入口），
+   后者只是某一段渲染抛了，重试即可，绝不该提示用户去重建账本。 */
+var bridgeFails = 0, jsFails = 0, lastJsMsg = '', lastRefreshFailed = false, fixAction = null;
 function noteBridgeFail(name){ bridgeFails++; }
+function noteJsError(msg){ jsFails++; lastJsMsg = String(msg === undefined ? '' : msg).slice(0, 160); }
+function updateBanner(){
+  var bar = $('errBar');
+  if (!bar) return;
+  if (!lastRefreshFailed && !jsFails) { bar.classList.remove('on'); fixAction = null; return; }
+  bar.classList.add('on');
+  var msg = $('errBarMsg'), fix = $('errBarFix');
+  if (lastRefreshFailed) {
+    msg.innerHTML = '<b>账本读取失败</b> —— 这个状态下不判断授权，避免让你反复去开已经开好的权限。';
+    fix.textContent = '重建账本';
+    fixAction = offerRecover;
+  } else {
+    msg.innerHTML = '<b>界面出现异常</b> —— ' + esc(lastJsMsg);
+    fix.textContent = '重试';
+    fixAction = function(){ jsFails = 0; refresh(); };
+  }
+}
+function offerFix(){ if (fixAction) fixAction(); }
+function offerRecover(){
+  showConfirm('重建账本？', '当前账本文件打不开。重建会新建一个空账本；损坏的文件只改名不删除，仍留在本机应用目录里，之后还能找回。',
+    '重建', function(){
+      var ok = call('recoverDatabase', false);
+      call('toast', null, ok ? '已重建空账本' : '重建失败，请重启应用再试');
+      refresh();
+    });
+}
+/* 一段渲染抛错不能连带后面的全不执行，否则界面会半新半旧。 */
+function safeRender(who, fn){
+  try { fn(); } catch (e) { noteJsError(who + ': ' + (e && e.message ? e.message : e)); }
+}
+/* 连点防抖：回填是全表扫描、导出会起线程，重复触发只会加重负担。 */
+var lastAct = {};
+function debounce(key, ms){
+  var t = Date.now(), p = lastAct[key];
+  if (p && t - p < (ms || 1500)) return false;
+  lastAct[key] = t;
+  return true;
+}
 function callJson(name, def, a1){
   var r = call(name, null, a1);
   if (r === null || r === undefined) { noteBridgeFail(name); return def; }
@@ -584,7 +655,7 @@ function callJson(name, def, a1){
 
 function refresh(){
   var before = bridgeFails;
-  S.status  = callJson('status', {listener:false, sms:false, smsBlocked:false, count:0, pending:0, ver:''});
+  S.status  = callJson('status', {listener:false, sms:false, smsBlocked:false, scanning:false, count:0, pending:0, ver:''});
   S.month   = callJson('month', {expense:0,income:0,count:0});
   S.today   = callJson('today', {expense:0,count:0});
   S.list    = callJson('list', [], 200);
@@ -592,9 +663,9 @@ function refresh(){
   S.cats    = callJson('cats', [], 30);
   S.pending = callJson('pendingList', []);
   // 有失败就不展示授权引导：此时我们根本不知道真实授权状态，引导只会误导
-  var fail = bridgeFails !== before;
-  $('errBar').classList.toggle('on', fail);
-  renderAll(!fail);
+  lastRefreshFailed = bridgeFails !== before;
+  updateBanner();
+  renderAll(!lastRefreshFailed);
 }
 window.BTRefresh = refresh;
 window.BTBack = function(){
@@ -605,11 +676,13 @@ window.BTBack = function(){
 
 /* ---------- 渲染 ---------- */
 function renderAll(trustState){
-  renderTop();
-  renderHome(trustState !== false);
-  renderReport();
-  renderBudget();
-  renderMe(trustState !== false);
+  var ok = trustState !== false;
+  safeRender('top', renderTop);
+  safeRender('home', function(){ renderHome(ok); });
+  safeRender('report', renderReport);
+  safeRender('budget', renderBudget);
+  safeRender('me', function(){ renderMe(ok); });
+  if (jsFails) updateBanner();
 }
 
 function renderTop(){
@@ -805,6 +878,12 @@ function renderMe(trustState){
   $('stSms').className = 'pill ' + (S.status.sms ? 'ok' : 'no');
   $('meCount').textContent = '共 ' + (S.status.count || 0) + ' 条记录';
   $('meVer').textContent = S.status.ver ? 'v' + S.status.ver : '—';
+  // 回填是全表扫描，没有进行中状态的话用户会以为没点上而反复点
+  var scanning = !!S.status.scanning;
+  var hint = $('rowImportHint');
+  if (hint) hint.textContent = scanning ? '正在扫描本机短信，请稍候…' : '把过去几个月的银行短信补进账本';
+  var row = $('rowImport');
+  if (row) row.classList.toggle('busy', scanning);
 }
 
 /* ---------- 筛选 / 搜索 ---------- */
@@ -1002,6 +1081,7 @@ function press(k){
 function saveManual(){
   var v = parseFloat(recAmt);
   if (!v || v <= 0) { call('toast', null, '先输入金额'); return; }
+  if (!debounce('manual', 1200)) return;
   var c = catOf(recCat);
   var amt = recType === 'exp' ? -v : v;
   call('addManual', null, amt, $('recName').value.trim(), recCat, c.name);
@@ -1028,12 +1108,12 @@ function saveBudget(){
   if (raw === '') { closeSheets(); return; }
   if (!isFinite(v) || v < 0) { call('toast', null, '请输入大于 0 的数字'); return; }
   if (v === 0) {
-    budget = 0; localStorage.setItem('bt_budget', '0');
+    budget = 0; saveSettings();
     closeSheets(); call('toast', null, '已清除预算'); renderHome(); renderBudget(); return;
   }
-  if (v > 1e9) { call('toast', null, '预算太大了，请输入 10 亿以内'); return; }
+  if (v > BUDGET_MAX) { call('toast', null, '预算太大了，请输入 10 亿以内'); return; }
   budget = v;
-  localStorage.setItem('bt_budget', String(budget));
+  saveSettings();
   closeSheets();
   renderHome(); renderBudget();
 }
@@ -1041,18 +1121,27 @@ function saveBudget(){
 /* ---------- 我的 ---------- */
 function toggleMask(){
   masked = !masked;
-  localStorage.setItem('bt_mask', masked ? '1' : '0');
+  saveSettings();
   renderTop();
 }
 function doExport(){
   if (!HAS_BT) return;
+  // exportCsv 永远带表头，所以判空得看记录数而不是看字符串
+  if (!S.status.count) { call('toast', null, '还没有记录可导出'); return; }
+  if (!debounce('export', 4000)) return;
   var csv = call('exportCsv', '');
-  if (!csv) { call('toast', null, '还没有记录可导出'); return; }
+  if (!csv) { call('toast', null, '导出失败'); return; }
+  call('toast', null, '正在导出…');
   try { window.BT.saveFile(csv); } catch (e) { call('toast', null, '导出失败'); }
 }
-function BT_openListener(){ call('openNotificationSettings', null); }
-function BT_importSms(){ call('importSms', null); }
-function BT_openSmsSettings(){ call('openSmsPermissionSettings', null); }
+function BT_openListener(){ if (!debounce('listener', 1200)) return; call('openNotificationSettings', null); }
+function BT_importSms(){
+  if (S.status.scanning) { call('toast', null, '正在扫描短信，请稍候'); return; }
+  if (!debounce('import', 1500)) return;
+  call('importSms', null);
+  setTimeout(refresh, 400);   // 让「正在扫描」立刻显示出来，不等下一次回前台
+}
+function BT_openSmsSettings(){ if (!debounce('smsset', 1200)) return; call('openSmsPermissionSettings', null); }
 
 /* ---------- 弹层 / 导航 ---------- */
 function openSheet(id){
@@ -1090,6 +1179,18 @@ function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+/* 全局兜底：任何漏网的异常都要在界面上看得见，而不是静默停在半更新状态。
+   只留最近若干条在内存里，不把账目内容写进任何持久存储。 */
+window.addEventListener('error', function(e){
+  noteJsError(e && e.message ? e.message : '未知错误');
+  updateBanner();
+});
+window.addEventListener('unhandledrejection', function(e){
+  var r = e && e.reason;
+  noteJsError('promise: ' + (r && r.message ? r.message : r));
+  updateBanner();
+});
 
 refresh();
 </script>

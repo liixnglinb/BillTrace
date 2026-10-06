@@ -30,9 +30,10 @@ const TXN = [
 ];
 
 function bridge(data) {
+  // 故意只写旧键 bt_budget：同时验证「旧版设置能迁移」这条路径
   return `
   ${data.budget ? `localStorage.setItem('bt_budget', '${data.budget}');` : ''}
-  window.__removed = []; window.__restored = []; window.__toast = '';
+  window.__removed = []; window.__restored = []; window.__toast = ''; window.__recover = 0;
   window.__S = ${JSON.stringify(data)};
   window.BT = {
     status: () => JSON.stringify(window.__S.status),
@@ -44,17 +45,18 @@ function bridge(data) {
     pendingList: () => JSON.stringify(window.__S.pending),
     remove: id => window.__removed.push(id),
     restore: j => window.__restored.push(j),
+    recoverDatabase: () => { window.__recover++; return true; },
     toast: m => { window.__toast = m; },
     exportCsv: () => 'x', saveFile: () => {}, addManual: () => {}, setCategory: () => {},
     openNotificationSettings: () => { window.__nav = 'listener'; },
     openSmsPermissionSettings: () => { window.__nav = 'sms'; },
-    importSms: () => { window.__nav = 'import'; },
+    importSms: () => { window.__nav = 'import'; window.__imports = (window.__imports || 0) + 1; },
   };`;
 }
 
 const OK = {
   budget: '5000',
-  status: { listener: true, sms: true, smsBlocked: false, count: 2, pending: 0, ver: '0.4.3' },
+  status: { listener: true, sms: true, smsBlocked: false, scanning: false, count: 2, pending: 0, ver: '0.4.3' },
   month: { expense: 1535.8, income: 0, count: 2 }, today: { expense: 35.8, count: 1 },
   list: TXN, daily: [0, 0, 0, 0, 0, 1500, 35.8],
   cats: [
@@ -65,19 +67,20 @@ const OK = {
   pending: [],
 };
 const EMPTY = {
-  budget: '0', status: { listener: false, sms: false, smsBlocked: false, count: 0, pending: 0, ver: '0.4.3' },
+  budget: '0', status: { listener: false, sms: false, smsBlocked: false, scanning: false, count: 0, pending: 0, ver: '0.4.3' },
   month: { expense: 0, income: 0, count: 0 }, today: { expense: 0, count: 0 },
   list: [], daily: [0, 0, 0, 0, 0, 0, 0], cats: [], pending: [],
 };
 const BLOCKED = Object.assign({}, EMPTY, {
-  status: { listener: false, sms: false, smsBlocked: true, count: 0, pending: 0, ver: '0.4.3' },
+  status: { listener: false, sms: false, smsBlocked: true, scanning: false, count: 0, pending: 0, ver: '0.4.3' },
 });
 // 故障注入：桥返回空对象 / 直接抛异常，模拟 Java 侧异常与桥整体失效
-const brokenBridge = (mode) => `window.BT = {
+const brokenBridge = (mode) => `window.__recover = 0; window.BT = {
     status: () => ${mode === 'throw' ? '{ throw new Error("sqlite disk I/O error"); }' : "'{}'"},
     month: () => '{}', today: () => '{}', list: () => '[]', daily: () => '[]',
     cats: () => '[]', pendingList: () => '[]',
     remove:()=>{}, restore:()=>{}, toast:()=>{}, exportCsv:()=>'', saveFile:()=>{},
+    recoverDatabase:() => { window.__recover++; return true; },
     addManual:()=>{}, setCategory:()=>{}, openNotificationSettings:()=>{},
     openSmsPermissionSettings:()=>{}, importSms:()=>{} };`;
 
@@ -213,18 +216,96 @@ for (const mode of ['emptyObj', 'throw']) {
   await p.close();
 }
 
-/* ---------- 5. 预算边界 ---------- */
+/* ---------- 5. 预算边界（含设置存储版本化与旧键迁移）---------- */
 {
   const { p } = await open(browser, bridge(OK));
   await p.evaluate(() => switchTab('budget'));
-  const cases = [['负数', '-100', '5000'], ['超限', '1e21', '5000'], ['有效值', '3000', '3000'], ['清除', '0', '0']];
-  for (const [label, input, expectStored] of cases) {
+  await p.waitForTimeout(300);
+  check('旧键 bt_budget 迁移生效', (await p.evaluate(() => document.getElementById('bTotal').textContent)) === '¥5,000.00');
+  const cases = [['负数', '-100', '¥5,000.00'], ['超限', '1e21', '¥5,000.00'],
+                 ['有效值', '3000', '¥3,000.00'], ['清除', '0', '未设置']];
+  for (const [label, input, expectShown] of cases) {
     await p.evaluate(v => { window.__toast = ''; document.getElementById('budgetInput').value = v; saveBudget(); }, input);
     await p.waitForTimeout(150);
-    const r = await p.evaluate(() => ({ s: localStorage.getItem('bt_budget'), t: window.__toast }));
-    check('预算 ' + label + ' 处理正确', r.s === expectStored, JSON.stringify(r));
+    const r = await p.evaluate(() => ({
+      shown: document.getElementById('bTotal').textContent,
+      t: window.__toast,
+      stored: localStorage.getItem('bt_settings_v1'),
+    }));
+    check('预算 ' + label + ' 处理正确', r.shown === expectShown, r.shown + ' | ' + r.stored);
     if (label === '负数' || label === '超限') check('预算 ' + label + ' 有提示', r.t.length > 0, r.t);
+    if (label === '有效值') check('预算写入带版本的新键', !!r.stored && JSON.parse(r.stored).v === 1 && JSON.parse(r.stored).budget === 3000, r.stored);
   }
+  await p.close();
+}
+
+/* ---------- 5b. 坏设置不得白屏 ---------- */
+{
+  const { p, errs } = await open(browser, `localStorage.setItem('bt_settings_v1','{不是JSON');` + bridge(OK));
+  const r = await p.evaluate(() => ({ hero: document.getElementById('heroTotal').textContent, b: budget }));
+  check('设置是坏 JSON 时仍能渲染', r.hero === '¥1,535.80' && r.b === 0, JSON.stringify(r));
+  await p.close();
+}
+{
+  const { p } = await open(browser, `localStorage.setItem('bt_settings_v1', JSON.stringify({v:1,budget:-9999,mask:'x'}));` + bridge(OK));
+  const r = await p.evaluate(() => ({ b: budget, m: masked }));
+  check('坏预算值被夹回 0', r.b === 0, JSON.stringify(r));
+  check('非布尔的 mask 被当 false', r.m === false);
+  await p.close();
+}
+
+/* ---------- 5c. 渲染隔离：一段抛错不能连带后面全不执行 ---------- */
+{
+  const { p } = await open(browser, bridge(OK));
+  const r = await p.evaluate(() => {
+    const orig = window.renderReport;
+    window.renderReport = function(){ throw new Error('boom'); };
+    renderAll(true);
+    const ok = document.getElementById('heroTotal').textContent;
+    window.renderReport = orig;
+    return { hero: ok, banner: document.getElementById('errBar').classList.contains('on'),
+             fix: document.getElementById('errBarFix').textContent };
+  });
+  check('某段渲染抛错时其他段仍更新', r.hero === '¥1,535.80', r.hero);
+  check('渲染抛错会显示横幅且给「重试」', r.banner && r.fix === '重试', JSON.stringify(r));
+  await p.close();
+}
+
+/* ---------- 5d. 数据故障给的是「重建账本」并要二次确认 ---------- */
+{
+  const { p } = await open(browser, brokenBridge('ok'));
+  const a = await p.evaluate(() => ({ fix: document.getElementById('errBarFix').textContent, n: window.__recover || 0 }));
+  check('数据故障横幅按钮是「重建账本」', a.fix === '重建账本', a.fix);
+  await p.evaluate(() => offerFix());
+  await p.waitForTimeout(250);
+  const b = await p.evaluate(() => ({ confirm: !!document.querySelector('#sh-confirm.on'), n: window.__recover || 0 }));
+  check('重建账本先弹确认且不直接执行', b.confirm && b.n === 0, JSON.stringify(b));
+  await p.evaluate(() => confirmYes());
+  await p.waitForTimeout(300);
+  check('确认后才调用 recoverDatabase', (await p.evaluate(() => window.__recover)) === 1);
+  await p.close();
+}
+
+/* ---------- 5e. 扫描进行中状态与连点防抖 ---------- */
+{
+  const scanning = Object.assign({}, OK, { status: Object.assign({}, OK.status, { scanning: true }) });
+  const { p } = await open(browser, bridge(scanning));
+  await p.evaluate(() => switchTab('me'));
+  await p.waitForTimeout(300);
+  const hint = await p.evaluate(() => document.getElementById('rowImportHint').textContent);
+  check('扫描中显示进行中文案', hint.indexOf('正在扫描') >= 0, hint);
+  const busy = await p.evaluate(() => document.getElementById('rowImport').classList.contains('busy'));
+  check('扫描中行置灰', busy);
+  await p.evaluate(() => { window.__imports = 0; BT_importSms(); });
+  const t = await p.evaluate(() => ({ n: window.__imports || 0, toast: window.__toast }));
+  check('扫描中再点不发起第二次，只提示', t.n === 0 && t.toast.indexOf('正在扫描') >= 0, JSON.stringify(t));
+  await p.close();
+}
+{
+  const { p } = await open(browser, bridge(OK));
+  await p.evaluate(() => { window.__imports = 0; BT_importSms(); BT_importSms(); BT_importSms(); });
+  const n = await p.evaluate(() => window.__imports);
+  check('连点三次导入只发一次（防抖）', n === 1, n);
   await p.close();
 }
 
