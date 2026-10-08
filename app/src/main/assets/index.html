@@ -124,7 +124,7 @@
 
     <div class="card">
       <h3>关于</h3>
-      <div class="kv"><span class="k">版本</span><span class="v" id="meVer">—</span></div>
+      <div class="kv"><span class="k">版本</span><span class="v" id="meVer">—</span><button class="linkbtn" id="btnUpdate" onclick="checkUpdate()">检查更新</button></div>
       <div class="kv"><span class="k">数据存放</span><span class="v">仅本机</span></div>
       <div class="kv"><span class="k">上传</span><span class="v">从不</span></div>
     </div>
@@ -242,6 +242,26 @@
   <div class="row2">
     <button class="btn ghost" onclick="closeSheets()">取消</button>
     <button class="btn" style="background:var(--danger-ink)" id="cfYes" onclick="confirmYes()">删除</button>
+  </div>
+</div>
+
+<!-- 软件更新：检查到新版本后弹这张卡，下载与安装都在这里完成。
+     下载由系统的 DownloadManager 负责，通知栏也会显示进度；
+     装的时候交给系统安装界面，用户自己点「下一步」。 -->
+<div class="sheet" id="sh-update">
+  <div class="grab"></div>
+  <div class="sh-title" id="upTitle">发现新版本</div>
+  <div class="muted" id="upMsg" style="margin-bottom:12px"></div>
+  <div class="up-notes" id="upNotes"></div>
+  <div class="up-prog-wrap" id="upProgWrap" hidden>
+    <div class="up-prog" id="upProg" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <i id="upProgFill"></i>
+    </div>
+    <div class="muted" id="upProgTxt">正在下载…</div>
+  </div>
+  <div class="row2" style="margin-top:14px">
+    <button class="btn ghost" id="upLater" onclick="closeSheets()">以后再说</button>
+    <button class="btn" id="upGo" onclick="updateGo()">更新并重启</button>
   </div>
 </div>
 

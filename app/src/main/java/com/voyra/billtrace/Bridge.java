@@ -374,6 +374,35 @@ public class Bridge {
         });
     }
 
+    /* ---------- 软件更新 ----------
+       四个动作分开暴露，是因为中间那步「下载」由系统的 DownloadManager 异步完成：
+       页面要能自己按需查进度、决定什么时候打开安装界面。
+       网络只发生在 check 与 download 两处，且都只下载、不上传任何数据。 */
+
+    /** 检查更新：{ok, current, latest, size, url, notes} */
+    @JavascriptInterface
+    public String updateCheck() {
+        return Updater.check(act);
+    }
+
+    /** 开始下载安装包（系统下载服务，通知栏自带进度） */
+    @JavascriptInterface
+    public String updateDownload(String url, String version) {
+        return Updater.download(act, url, version);
+    }
+
+    /** 查询下载进度：{state, bytes, total} */
+    @JavascriptInterface
+    public String updateProgress() {
+        return Updater.progress(act);
+    }
+
+    /** 打开系统安装界面（用户自己点「下一步」完成安装） */
+    @JavascriptInterface
+    public String updateInstall() {
+        return Updater.install(act);
+    }
+
     // 以下两个不是桥方法，只供 Java 内部使用；暴露给 JS 没有收益，只会扩大桥的攻击面。
 
     private boolean isListenerEnabled() {

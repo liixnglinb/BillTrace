@@ -234,6 +234,42 @@ t('PAGE 与桥侧上限自洽', () => {
   assert.ok(C.PAGE <= +m[1], '一页要的量超过桥上限会被静默截断');
 });
 
+/* ---------- 更新：版本比较与进度 ---------- */
+t('verCmp 三段数字逐位比较', () => {
+  assert.equal(C.verCmp('0.5.0', '0.4.4'), 1);
+  assert.equal(C.verCmp('0.4.4', '0.5.0'), -1);
+  assert.equal(C.verCmp('0.4.4', '0.4.4'), 0);
+  assert.equal(C.verCmp('v0.5.0', '0.4.4'), 1, '带 v 前缀要能剥掉');
+  assert.equal(C.verCmp('0.10.0', '0.9.9'), 1, '按数字比，不是按字符串比');
+});
+t('verCmp 对预发布后缀不返回 NaN 判定', () => {
+  // 0.5.0-beta.1 的三段数字等于 0.5.0：既不更新也不更旧
+  assert.equal(C.verCmp('0.5.0-beta.1', '0.5.0'), 0);
+  assert.equal(C.verCmp('0.5.1-beta.1', '0.5.0'), 1);
+});
+t('verCmp 对空值与脏值不抛异常', () => {
+  assert.equal(C.verCmp(null, '0.4.4'), -1);
+  assert.equal(C.verCmp('', '0.4.4'), -1);
+  assert.equal(C.verCmp('abc', '0.4.4'), -1, '非数字段按 0 处理');
+  assert.equal(C.verCmp(undefined, undefined), 0);
+});
+t('pctOf 正常区间', () => {
+  assert.equal(C.pctOf(0, 100), 0);
+  assert.equal(C.pctOf(50, 100), 50);
+  assert.equal(C.pctOf(100, 100), 100);
+  assert.equal(C.pctOf(150, 100), 100, '超过总量要钳到 100');
+});
+t('pctOf 总量未知时返回 -1（界面据此显示已下载字节数）', () => {
+  assert.equal(C.pctOf(1024, -1), -1);
+  assert.equal(C.pctOf(1024, 0), -1);
+  assert.equal(C.pctOf(1024, NaN), -1);
+});
+t('pctOf 对负值与脏值不返回 NaN', () => {
+  assert.equal(C.pctOf(-5, 100), 0);
+  assert.equal(C.pctOf(NaN, 100), 0);
+  assert.equal(C.pctOf(undefined, undefined), -1);
+});
+
 const failed = results.filter(r => !r.pass);
 for (const r of results) console.log((r.pass ? '  PASS  ' : '  FAIL  ') + r.name + (r.detail ? '   [' + r.detail + ']' : ''));
 console.log('\n' + (results.length - failed.length) + '/' + results.length + ' 通过');

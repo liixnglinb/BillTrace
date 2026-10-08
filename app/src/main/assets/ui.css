@@ -287,3 +287,15 @@ input{font:inherit;color:inherit}
 /* 禁用态要同时降饱和和降对比，不能只靠 opacity —— 只透明文字会被读屏当正常读出 */
 .btn:disabled,.iconbtn:disabled{background:var(--fill-key-fn);color:var(--text2);box-shadow:none;transform:none;cursor:default;border-color:var(--line)}
 .btn.ghost:disabled{background:var(--fill-key-fn)}
+
+/* ---------- 软件更新（检查更新按钮 / 下载进度） ---------- */
+/* 版本行右侧的小按钮：小字一律用 --primary-ink（品牌绿直接写小字不过 AA） */
+.linkbtn{background:none;border:0;padding:4px 0 4px 10px;margin-left:auto;font-size:13px;font-weight:600;color:var(--primary-ink);font-family:var(--font)}
+.linkbtn:active{opacity:.6}
+.linkbtn:disabled{color:var(--text2)}
+.up-notes{max-height:180px;overflow-y:auto;white-space:pre-wrap;background:var(--fill-soft);border:1px solid var(--line);border-radius:var(--r-input);padding:10px 12px;font-size:13px;line-height:1.7;color:var(--text2)}
+.up-notes:empty{display:none}
+.up-prog-wrap{margin-top:12px}
+.up-prog{height:8px;border-radius:4px;background:var(--rail);overflow:hidden}
+.up-prog i{display:block;height:100%;width:0;background:var(--primary);transition:width .2s}
+.up-prog-wrap .muted{margin-top:6px;font-size:12.5px}

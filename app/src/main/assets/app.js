@@ -670,4 +670,114 @@ window.addEventListener('unhandledrejection', function(e){
   updateBanner();
 });
 
+/* ---------- 软件更新 ----------
+   桥上的四个动作：updateCheck / updateDownload / updateProgress / updateInstall。
+   下载交给系统的 DownloadManager（通知栏也有一条进度），这里只轮询状态并显示；
+   装的时候打开系统安装界面 —— Android 不允许应用自己静默安装，必须由用户点「下一步」。 */
+var UP = {latest:'', url:'', size:0, notes:'', state:'idle', timer:null};
+
+function upFmtSize(n){
+  n = Number(n) || 0;
+  if (n <= 0) return '';
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+}
+function upSetBusy(busy, text){
+  var b = $('btnUpdate');
+  if (!b) return;
+  b.disabled = !!busy;
+  b.textContent = text || '检查更新';
+}
+function checkUpdate(){
+  if (!HAS_BT) { call('toast', null, '更新只在安装版里可用'); return; }
+  upSetBusy(true, '检查中…');
+  var r = callJson('updateCheck', null);
+  upSetBusy(false);
+  if (!r || !r.ok) { call('toast', null, (r && r.error) || '检查更新失败，请检查网络后重试'); return; }
+  var cur = r.current || S.status.ver || '';
+  if (verCmp(r.latest, cur) <= 0) { call('toast', null, '已是最新版本 v' + cur); return; }
+  UP.latest = r.latest; UP.url = r.url || ''; UP.size = r.size || 0; UP.notes = r.notes || '';
+  UP.state = 'available';
+  renderUpdateSheet();
+  openSheet('sh-update');
+}
+function renderUpdateSheet(){
+  $('upTitle').textContent = '发现新版本 v' + UP.latest;
+  var bits = ['当前 v' + (S.status.ver || '—')];
+  var sz = upFmtSize(UP.size);
+  if (sz) bits.push(sz);
+  $('upMsg').textContent = bits.join(' · ');
+  $('upNotes').textContent = UP.notes || '本次更新没有附带说明。';
+  var go = $('upGo'), later = $('upLater'), wrap = $('upProgWrap');
+  if (!go || !later || !wrap) return;
+  if (UP.state === 'downloading') {
+    wrap.hidden = false;
+    go.disabled = true; go.textContent = '下载中…';
+    later.textContent = '后台下载';
+  } else if (UP.state === 'done') {
+    wrap.hidden = false;
+    go.disabled = false; go.textContent = '安装';
+    later.textContent = '以后再说';
+  } else {
+    wrap.hidden = true;
+    go.disabled = false; go.textContent = '更新并重启';
+    later.textContent = '以后再说';
+  }
+}
+function upPaintProgress(p){
+  var wrap = $('upProgWrap'), bar = $('upProg'), fill = $('upProgFill'), txt = $('upProgTxt');
+  if (!wrap || !bar || !fill || !txt) return;
+  wrap.hidden = false;
+  var pct = pctOf(p.bytes, p.total);
+  if (pct < 0) {
+    /* 总量还没拿到：报已下载字节数，别让进度条永远停在 0% 看着像卡死 */
+    fill.style.width = '0%';
+    bar.setAttribute('aria-valuenow', '0');
+    txt.textContent = '正在下载…已下载 ' + (upFmtSize(p.bytes) || '0 KB');
+  } else {
+    fill.style.width = pct + '%';
+    bar.setAttribute('aria-valuenow', String(pct));
+    txt.textContent = '正在下载…' + pct + '%';
+  }
+}
+function upStopPoll(){ if (UP.timer) { clearInterval(UP.timer); UP.timer = null; } }
+function upPoll(){
+  var p = callJson('updateProgress', null);
+  if (!p) return;
+  if (p.state === 'failed') {
+    upStopPoll(); UP.state = 'available'; renderUpdateSheet();
+    call('toast', null, '下载失败，请稍后重试');
+    return;
+  }
+  if (p.state === 'done') {
+    upStopPoll(); UP.state = 'done';
+    upPaintProgress({bytes: p.bytes || 0, total: p.total || 0});
+    renderUpdateSheet();
+    call('toast', null, '下载完成，点「安装」继续');
+    return;
+  }
+  if (p.state === 'idle') { upStopPoll(); UP.state = 'available'; renderUpdateSheet(); return; }
+  upPaintProgress(p);
+}
+function updateGo(){
+  if (UP.state === 'done') { upInstall(); return; }
+  if (UP.state === 'downloading') return;
+  var r = callJson('updateDownload', null, UP.url, UP.latest);
+  if (!r || !r.ok) { call('toast', null, (r && r.error) || '开始下载失败'); return; }
+  UP.state = 'downloading';
+  renderUpdateSheet();
+  upStopPoll();
+  UP.timer = setInterval(upPoll, 800);
+  upPoll();
+}
+function upInstall(){
+  var r = callJson('updateInstall', null);
+  if (!r) { call('toast', null, '打开安装程序失败'); return; }
+  if (r.needPermission) { call('toast', null, r.error || '请先允许安装未知来源的应用'); return; }
+  if (!r.ok) { call('toast', null, r.error || '打开安装程序失败'); return; }
+  call('toast', null, '已打开安装界面，按提示点「下一步」完成');
+  closeSheets();
+}
+/* 切走页面时停掉轮询：下载在系统侧继续，回来再点「检查更新」即可看到就绪状态 */
+window.addEventListener('pagehide', upStopPoll);
+
 refresh();

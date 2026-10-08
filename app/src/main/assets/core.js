@@ -182,8 +182,40 @@
     return true;
   }
 
+  /**
+   * 语义化版本比较：a 比 b 新返回 1，相同返回 0，更旧返回 -1。
+   * 只比三段数字，预发布后缀（0.5.0-beta.1）先剥掉 —— 否则 parseInt 出 NaN，
+   * 而 NaN 的所有比较都是 false，"有新版本"就永远判不出来。
+   */
+  function verCmp(a, b) {
+    var pa = String(a == null ? '' : a).replace(/^v/i, '').split('-')[0].split('.');
+    var pb = String(b == null ? '' : b).replace(/^v/i, '').split('-')[0].split('.');
+    for (var i = 0; i < 3; i++) {
+      var x = parseInt(pa[i], 10) || 0;
+      var y = parseInt(pb[i], 10) || 0;
+      if (x > y) return 1;
+      if (x < y) return -1;
+    }
+    return 0;
+  }
+
+  /**
+   * 下载进度百分比（0-100 整数）。
+   * total 未知时返回 -1：DownloadManager 在拿到 Content-Length 之前会报 -1，
+   * 直接按 0 处理的话进度条永远停在 0%，看着像卡死。
+   */
+  function pctOf(done, total) {
+    var d = Number(done), t = Number(total);
+    if (!isFinite(d) || d < 0) d = 0;
+    if (!isFinite(t) || t <= 0) return -1;
+    var p = Math.round(d / t * 100);
+    if (p < 0) return 0;
+    return p > 100 ? 100 : p;
+  }
+
   return {
     CATS: CATS, CICON: CICON, ICON_KEYS: ICON_KEYS, WEEK: WEEK, PRIMARY_INK: PRIMARY_INK,
+    verCmp: verCmp, pctOf: pctOf,
     SETTINGS_KEY: SETTINGS_KEY, BUDGET_MAX: BUDGET_MAX, PAGE: PAGE,
     catOf: catOf, catSvg: catSvg, money: money, moneyShort: moneyShort, pad2: pad2,
     dayKey: dayKey, dayLabel: dayLabel, iconHtml: iconHtml, esc: esc,

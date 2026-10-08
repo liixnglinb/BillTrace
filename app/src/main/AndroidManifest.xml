@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 故意不声明 INTERNET：App 只读本机通知与短信、只写本地 SQLite，
-         声明了反而和「不联网、不上传」的承诺矛盾，也平白多一项权限审计面。 -->
+    <!-- 这条老注释「故意不声明 INTERNET」从 0.5.0 起不成立：为了能自动识别新版本，
+         现在只有「检查更新」会联网，且只 GET 一次版本信息、不上传任何数据；
+         下载走系统 DownloadManager（通知栏进度），同样只下不上。
+         除此之外应用仍然只读本机通知与短信、只写本地 SQLite。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- 安装更新包：Android 8 起需要它，但最终装不装仍由用户在系统安装界面点「下一步」决定 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:hardwareAccelerated="true"
